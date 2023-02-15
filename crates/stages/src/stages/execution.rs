@@ -73,200 +73,206 @@ impl ExecutionStage {
         tx: &mut Transaction<'_, DB>,
         input: ExecInput,
     ) -> Result<ExecOutput, StageError> {
-        let ((start_block, end_block), capped) =
-            exec_or_return!(input, self.commit_threshold, "sync::stages::execution");
-        let last_block = input.stage_progress.unwrap_or_default();
-
-        // Get header with canonical hashes.
-        let mut headers_cursor = tx.cursor_read::<tables::Headers>()?;
-        // Get total difficulty
-        let mut td_cursor = tx.cursor_read::<tables::HeaderTD>()?;
-        // Get bodies with canonical hashes.
-        let mut bodies_cursor = tx.cursor_read::<tables::BlockBodies>()?;
-        // Get ommers with canonical hashes.
-        let mut ommers_cursor = tx.cursor_read::<tables::BlockOmmers>()?;
-        // Get transaction of the block that we are executing.
-        let mut tx_cursor = tx.cursor_read::<tables::Transactions>()?;
-        // Skip sender recovery and load signer from database.
-        let mut tx_sender = tx.cursor_read::<tables::TxSenders>()?;
-
-        // Get block headers and bodies
-        let block_batch = headers_cursor
-            .walk_range(start_block..=end_block)?
-            .map(|entry| -> Result<(Header, U256, StoredBlockBody, Vec<Header>), StageError> {
-                let (number, header) = entry?;
-                let (_, td) = td_cursor
-                    .seek_exact(number)?
-                    .ok_or(ProviderError::TotalDifficulty { number })?;
-                let (_, body) =
-                    bodies_cursor.seek_exact(number)?.ok_or(ProviderError::BlockBody { number })?;
-                let (_, stored_ommers) = ommers_cursor.seek_exact(number)?.unwrap_or_default();
-                Ok((header, td.into(), body, stored_ommers.ommers))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        // Create state provider with cached state
-        let mut state_provider = SubState::new(State::new(LatestStateProviderRef::new(&**tx)));
-
-        // Fetch transactions, execute them and generate results
-        let mut block_change_patches = Vec::with_capacity(block_batch.len());
-        for (header, td, body, ommers) in block_batch.into_iter() {
-            let block_number = header.number;
-            tracing::trace!(target: "sync::stages::execution", ?block_number, "Execute block.");
-
-            // iterate over all transactions
-            let mut tx_walker = tx_cursor.walk(Some(body.start_tx_id))?;
-            let mut transactions = Vec::with_capacity(body.tx_count as usize);
-            // get next N transactions.
-            for index in body.tx_id_range() {
-                let (tx_index, tx) =
-                    tx_walker.next().ok_or(ProviderError::EndOfTransactionTable)??;
-                if tx_index != index {
-                    error!(target: "sync::stages::execution", block = block_number, expected = index, found = tx_index, ?body, "Transaction gap");
-                    return Err(ProviderError::TransactionsGap { missing: tx_index }.into())
-                }
-                transactions.push(tx);
-            }
-
-            // take signers
-            let mut tx_sender_walker = tx_sender.walk(Some(body.start_tx_id))?;
-            let mut signers = Vec::with_capacity(body.tx_count as usize);
-            for index in body.tx_id_range() {
-                let (tx_index, tx) =
-                    tx_sender_walker.next().ok_or(ProviderError::EndOfTransactionSenderTable)??;
-                if tx_index != index {
-                    error!(target: "sync::stages::execution", block = block_number, expected = index, found = tx_index, ?body, "Signer gap");
-                    return Err(ProviderError::TransactionsSignerGap { missing: tx_index }.into())
-                }
-                signers.push(tx);
-            }
-
-            trace!(target: "sync::stages::execution", number = block_number, txs = transactions.len(), "Executing block");
-
-            let changeset = reth_executor::executor::execute_and_verify_receipt(
-                &Block { header, body: transactions, ommers },
-                td,
-                Some(signers),
-                &self.chain_spec,
-                &mut state_provider,
-            )
-            .map_err(|error| StageError::ExecutionError { block: block_number, error })?;
-            block_change_patches.push((changeset, block_number));
-        }
-
-        // Get last tx count so that we can know amount of transaction in the block.
-        let mut current_transition_id = tx.get_block_transition(last_block)?;
-        info!(target: "sync::stages::execution", current_transition_id, blocks = block_change_patches.len(), "Inserting execution results");
-
         // TODO cursor
-        // apply changes to plain database.
-        for (results, block_number) in block_change_patches.into_iter() {
-            let spurious_dragon_active =
-                self.chain_spec.fork(Hardfork::SpuriousDragon).active_at_block(block_number);
-            // insert state change set
-            for result in results.changesets.into_iter() {
-                for (address, account_change_set) in result.changeset.into_iter() {
-                    let AccountChangeSet { account, wipe_storage, storage } = account_change_set;
-                    // apply account change to db. Updates AccountChangeSet and PlainAccountState
-                    // tables.
-                    trace!(target: "sync::stages::execution", ?address, current_transition_id, ?account, wipe_storage, "Applying account changeset");
-                    account.apply_to_db(
-                        &**tx,
-                        address,
-                        current_transition_id,
-                        spurious_dragon_active,
-                    )?;
+        todo!()
+        // let ((start_block, end_block), capped) =
+        //     exec_or_return!(input, self.commit_threshold, "sync::stages::execution");
+        // let last_block = input.stage_progress.unwrap_or_default();
 
-                    let storage_id = TransitionIdAddress((current_transition_id, address));
+        // // Get header with canonical hashes.
+        // let mut headers_cursor = tx.cursor_read::<tables::Headers>()?;
+        // // Get total difficulty
+        // let mut td_cursor = tx.cursor_read::<tables::HeaderTD>()?;
+        // // Get bodies with canonical hashes.
+        // let mut bodies_cursor = tx.cursor_read::<tables::BlockBodies>()?;
+        // // Get ommers with canonical hashes.
+        // let mut ommers_cursor = tx.cursor_read::<tables::BlockOmmers>()?;
+        // // Get transaction of the block that we are executing.
+        // let mut tx_cursor = tx.cursor_read::<tables::Transactions>()?;
+        // // Skip sender recovery and load signer from database.
+        // let mut tx_sender = tx.cursor_read::<tables::TxSenders>()?;
 
-                    // cast key to H256 and trace the change
-                    let storage = storage
-                        .into_iter()
-                        .map(|(key, (old_value,new_value))| {
-                            let hkey = H256(key.to_be_bytes());
-                            trace!(target: "sync::stages::execution", ?address, current_transition_id, ?hkey, ?old_value, ?new_value, "Applying storage changeset");
-                            (hkey, old_value,new_value)
-                        })
-                        .collect::<Vec<_>>();
+        // // Get block headers and bodies
+        // let block_batch = headers_cursor
+        //     .walk_range(start_block..=end_block)?
+        //     .map(|entry| -> Result<(Header, U256, StoredBlockBody, Vec<Header>), StageError> {
+        //         let (number, header) = entry?;
+        //         let (_, td) = td_cursor
+        //             .seek_exact(number)?
+        //             .ok_or(ProviderError::TotalDifficulty { number })?;
+        //         let (_, body) =
+        //             bodies_cursor.seek_exact(number)?.ok_or(ProviderError::BlockBody { number
+        // })?;         let (_, stored_ommers) =
+        // ommers_cursor.seek_exact(number)?.unwrap_or_default();         Ok((header,
+        // td.into(), body, stored_ommers.ommers))     })
+        //     .collect::<Result<Vec<_>, _>>()?;
 
-                    let mut cursor_storage_changeset =
-                        tx.cursor_write::<tables::StorageChangeSet>()?;
-                    cursor_storage_changeset.seek_exact(storage_id)?;
+        // // Create state provider with cached state
+        // let mut state_provider = SubState::new(State::new(LatestStateProviderRef::new(&**tx)));
 
-                    if wipe_storage {
-                        // iterate over storage and save them before entry is deleted.
-                        tx.cursor_read::<tables::PlainStorageState>()?
-                            .walk(Some(address))?
-                            .take_while(|res| {
-                                res.as_ref().map(|(k, _)| *k == address).unwrap_or_default()
-                            })
-                            .try_for_each(|entry| {
-                                let (_, old_value) = entry?;
-                                cursor_storage_changeset.append(storage_id, old_value)
-                            })?;
+        // // Fetch transactions, execute them and generate results
+        // let mut block_change_patches = Vec::with_capacity(block_batch.len());
+        // for (header, td, body, ommers) in block_batch.into_iter() {
+        //     let block_number = header.number;
+        //     tracing::trace!(target: "sync::stages::execution", ?block_number, "Execute block.");
 
-                        // delete all entries
-                        tx.delete::<tables::PlainStorageState>(address, None)?;
+        //     // iterate over all transactions
+        //     let mut tx_walker = tx_cursor.walk(Some(body.start_tx_id))?;
+        //     let mut transactions = Vec::with_capacity(body.tx_count as usize);
+        //     // get next N transactions.
+        //     for index in body.tx_id_range() {
+        //         let (tx_index, tx) =
+        //             tx_walker.next().ok_or(ProviderError::EndOfTransactionTable)??;
+        //         if tx_index != index {
+        //             error!(target: "sync::stages::execution", block = block_number, expected =
+        // index, found = tx_index, ?body, "Transaction gap");             return
+        // Err(ProviderError::TransactionsGap { missing: tx_index }.into())         }
+        //         transactions.push(tx);
+        //     }
 
-                        // insert storage changeset
-                        for (key, _, new_value) in storage {
-                            // old values are already cleared.
-                            if new_value != U256::ZERO {
-                                tx.put2::<tables::PlainStorageState>(
-                                    address,
-                                    StorageEntry { key, value: new_value },
-                                )?;
-                            }
-                        }
-                    } else {
-                        // insert storage changeset
-                        for (key, old_value, new_value) in storage {
-                            let old_entry = StorageEntry { key, value: old_value };
-                            let new_entry = StorageEntry { key, value: new_value };
-                            // insert into StorageChangeSet
-                            cursor_storage_changeset.append(storage_id, old_entry)?;
+        //     // take signers
+        //     let mut tx_sender_walker = tx_sender.walk(Some(body.start_tx_id))?;
+        //     let mut signers = Vec::with_capacity(body.tx_count as usize);
+        //     for index in body.tx_id_range() {
+        //         let (tx_index, tx) =
+        //             tx_sender_walker.next().ok_or(ProviderError::EndOfTransactionSenderTable)??;
+        //         if tx_index != index {
+        //             error!(target: "sync::stages::execution", block = block_number, expected =
+        // index, found = tx_index, ?body, "Signer gap");             return
+        // Err(ProviderError::TransactionsSignerGap { missing: tx_index }.into())         }
+        //         signers.push(tx);
+        //     }
 
-                            // Always delete old value as duplicate table, put will not override it
-                            tx.delete::<tables::PlainStorageState>(address, Some(old_entry))?;
-                            if new_value != U256::ZERO {
-                                tx.put2::<tables::PlainStorageState>(address, new_entry)?;
-                            }
-                        }
-                    }
-                }
-                // insert bytecode
-                for (hash, bytecode) in result.new_bytecodes.into_iter() {
-                    // make different types of bytecode. Checked and maybe even analyzed (needs to
-                    // be packed). Currently save only raw bytes.
-                    let bytecode = bytecode.bytes();
-                    trace!(target: "sync::stages::execution", ?hash, ?bytecode, len = bytecode.len(), "Inserting bytecode");
-                    tx.put2::<tables::Bytecodes>(hash, bytecode[..bytecode.len()].to_vec())?;
+        //     trace!(target: "sync::stages::execution", number = block_number, txs =
+        // transactions.len(), "Executing block");
 
-                    // NOTE: bytecode bytes are not inserted in change set and can be found in
-                    // separate table
-                }
-                current_transition_id += 1;
-            }
+        //     let changeset = reth_executor::executor::execute_and_verify_receipt(
+        //         &Block { header, body: transactions, ommers },
+        //         td,
+        //         Some(signers),
+        //         &self.chain_spec,
+        //         &mut state_provider,
+        //     )
+        //     .map_err(|error| StageError::ExecutionError { block: block_number, error })?;
+        //     block_change_patches.push((changeset, block_number));
+        // }
 
-            // If there is block reward we will add account changeset to db
-            if let Some(block_reward_changeset) = results.block_reward {
-                // we are sure that block reward index is present.
-                for (address, changeset) in block_reward_changeset.into_iter() {
-                    trace!(target: "sync::stages::execution", ?address, current_transition_id, "Applying block reward");
-                    changeset.apply_to_db(
-                        &**tx,
-                        address,
-                        current_transition_id,
-                        spurious_dragon_active,
-                    )?;
-                }
-                current_transition_id += 1;
-            }
-        }
+        // // Get last tx count so that we can know amount of transaction in the block.
+        // let mut current_transition_id = tx.get_block_transition(last_block)?;
+        // info!(target: "sync::stages::execution", current_transition_id, blocks =
+        // block_change_patches.len(), "Inserting execution results");
 
-        let done = !capped;
-        info!(target: "sync::stages::execution", stage_progress = end_block, done, "Sync iteration finished");
-        Ok(ExecOutput { stage_progress: end_block, done })
+        // // TODO cursor
+        // // apply changes to plain database.
+        // for (results, block_number) in block_change_patches.into_iter() {
+        //     let spurious_dragon_active =
+        //         self.chain_spec.fork(Hardfork::SpuriousDragon).active_at_block(block_number);
+        //     // insert state change set
+        //     for result in results.changesets.into_iter() {
+        //         for (address, account_change_set) in result.changeset.into_iter() {
+        //             let AccountChangeSet { account, wipe_storage, storage } = account_change_set;
+        //             // apply account change to db. Updates AccountChangeSet and PlainAccountState
+        //             // tables.
+        //             trace!(target: "sync::stages::execution", ?address, current_transition_id,
+        // ?account, wipe_storage, "Applying account changeset");
+        // account.apply_to_db(                 &**tx,
+        //                 address,
+        //                 current_transition_id,
+        //                 spurious_dragon_active,
+        //             )?;
+
+        //             let storage_id = TransitionIdAddress((current_transition_id, address));
+
+        //             // cast key to H256 and trace the change
+        //             let storage = storage
+        //                 .into_iter()
+        //                 .map(|(key, (old_value,new_value))| {
+        //                     let hkey = H256(key.to_be_bytes());
+        //                     trace!(target: "sync::stages::execution", ?address,
+        // current_transition_id, ?hkey, ?old_value, ?new_value, "Applying storage changeset");
+        //                     (hkey, old_value,new_value)
+        //                 })
+        //                 .collect::<Vec<_>>();
+
+        //             let mut cursor_storage_changeset =
+        //                 tx.cursor_write::<tables::StorageChangeSet>()?;
+        //             cursor_storage_changeset.seek_exact(storage_id)?;
+
+        //             if wipe_storage {
+        //                 // iterate over storage and save them before entry is deleted.
+        //                 tx.cursor_read::<tables::PlainStorageState>()?
+        //                     .walk(Some(address))?
+        //                     .take_while(|res| {
+        //                         res.as_ref().map(|(k, _)| *k == address).unwrap_or_default()
+        //                     })
+        //                     .try_for_each(|entry| {
+        //                         let (_, old_value) = entry?;
+        //                         cursor_storage_changeset.append(storage_id, old_value)
+        //                     })?;
+
+        //                 // delete all entries
+        //                 tx.delete::<tables::PlainStorageState>(address, None)?;
+
+        //                 // insert storage changeset
+        //                 for (key, _, new_value) in storage {
+        //                     // old values are already cleared.
+        //                     if new_value != U256::ZERO {
+        //                         tx.put2::<tables::PlainStorageState>(
+        //                             address,
+        //                             StorageEntry { key, value: new_value },
+        //                         )?;
+        //                     }
+        //                 }
+        //             } else {
+        //                 // insert storage changeset
+        //                 for (key, old_value, new_value) in storage {
+        //                     let old_entry = StorageEntry { key, value: old_value };
+        //                     let new_entry = StorageEntry { key, value: new_value };
+        //                     // insert into StorageChangeSet
+        //                     cursor_storage_changeset.append(storage_id, old_entry)?;
+
+        //                     // Always delete old value as duplicate table, put will not override
+        // it                     tx.delete::<tables::PlainStorageState>(address,
+        // Some(old_entry))?;                     if new_value != U256::ZERO {
+        //                         tx.put2::<tables::PlainStorageState>(address, new_entry)?;
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //         // insert bytecode
+        //         for (hash, bytecode) in result.new_bytecodes.into_iter() {
+        //             // make different types of bytecode. Checked and maybe even analyzed (needs
+        // to             // be packed). Currently save only raw bytes.
+        //             let bytecode = bytecode.bytes();
+        //             trace!(target: "sync::stages::execution", ?hash, ?bytecode, len =
+        // bytecode.len(), "Inserting bytecode");
+        // tx.put2::<tables::Bytecodes>(hash, bytecode[..bytecode.len()].to_vec())?;
+
+        //             // NOTE: bytecode bytes are not inserted in change set and can be found in
+        //             // separate table
+        //         }
+        //         current_transition_id += 1;
+        //     }
+
+        //     // If there is block reward we will add account changeset to db
+        //     if let Some(block_reward_changeset) = results.block_reward {
+        //         // we are sure that block reward index is present.
+        //         for (address, changeset) in block_reward_changeset.into_iter() {
+        //             trace!(target: "sync::stages::execution", ?address, current_transition_id,
+        // "Applying block reward");             changeset.apply_to_db(
+        //                 &**tx,
+        //                 address,
+        //                 current_transition_id,
+        //                 spurious_dragon_active,
+        //             )?;
+        //         }
+        //         current_transition_id += 1;
+        //     }
+        // }
+
+        // let done = !capped;
+        // info!(target: "sync::stages::execution", stage_progress = end_block, done, "Sync
+        // iteration finished"); Ok(ExecOutput { stage_progress: end_block, done })
     }
 }
 
@@ -313,84 +319,86 @@ impl<DB: Database> Stage<DB> for ExecutionStage {
         tx: &mut Transaction<'_, DB>,
         input: UnwindInput,
     ) -> Result<UnwindOutput, StageError> {
-        info!(target: "sync::stages::execution", to_block = input.unwind_to, "Unwinding");
+        // TODO cursor
+        todo!()
+        // info!(target: "sync::stages::execution", to_block = input.unwind_to, "Unwinding");
 
-        // Acquire changeset cursors
-        let mut account_changeset = tx.cursor_dup_write::<tables::AccountChangeSet>()?;
-        let mut storage_changeset = tx.cursor_dup_write::<tables::StorageChangeSet>()?;
+        // // Acquire changeset cursors
+        // let mut account_changeset = tx.cursor_dup_write::<tables::AccountChangeSet>()?;
+        // let mut storage_changeset = tx.cursor_dup_write::<tables::StorageChangeSet>()?;
 
-        let from_transition_rev = tx.get_block_transition(input.unwind_to)?;
-        let to_transition_rev = tx.get_block_transition(input.stage_progress)?;
+        // let from_transition_rev = tx.get_block_transition(input.unwind_to)?;
+        // let to_transition_rev = tx.get_block_transition(input.stage_progress)?;
 
-        if from_transition_rev > to_transition_rev {
-            panic!("Unwind transition {} (stage progress block #{}) is higher than the transition {} of (unwind block #{})", from_transition_rev, input.stage_progress, to_transition_rev, input.unwind_to);
-        }
-        let num_of_tx = (to_transition_rev - from_transition_rev) as usize;
+        // if from_transition_rev > to_transition_rev {
+        //     panic!("Unwind transition {} (stage progress block #{}) is higher than the transition {} of (unwind block #{})", from_transition_rev, input.stage_progress, to_transition_rev, input.unwind_to);
+        // }
+        // let num_of_tx = (to_transition_rev - from_transition_rev) as usize;
 
-        // if there is no transaction ids, this means blocks were empty and block reward change set
-        // is not present.
-        if num_of_tx == 0 {
-            return Ok(UnwindOutput { stage_progress: input.unwind_to })
-        }
+        // // if there is no transaction ids, this means blocks were empty and block reward change
+        // set // is not present.
+        // if num_of_tx == 0 {
+        //     return Ok(UnwindOutput { stage_progress: input.unwind_to })
+        // }
 
-        // get all batches for account change
-        // Check if walk and walk_dup would do the same thing
-        let account_changeset_batch = account_changeset
-            .walk_range(from_transition_rev..to_transition_rev)?
-            .collect::<Result<Vec<_>, _>>()?;
+        // // get all batches for account change
+        // // Check if walk and walk_dup would do the same thing
+        // let account_changeset_batch = account_changeset
+        //     .walk_range(from_transition_rev..to_transition_rev)?
+        //     .collect::<Result<Vec<_>, _>>()?;
 
-        // revert all changes to PlainState
-        for (_, changeset) in account_changeset_batch.into_iter().rev() {
-            if let Some(account_info) = changeset.info {
-                tx.put2::<tables::PlainAccountState>(changeset.address, account_info)?;
-            } else {
-                tx.delete::<tables::PlainAccountState>(changeset.address, None)?;
-            }
-        }
+        // // revert all changes to PlainState
+        // for (_, changeset) in account_changeset_batch.into_iter().rev() {
+        //     if let Some(account_info) = changeset.info {
+        //         tx.put2::<tables::PlainAccountState>(changeset.address, account_info)?;
+        //     } else {
+        //         tx.delete::<tables::PlainAccountState>(changeset.address, None)?;
+        //     }
+        // }
 
-        // get all batches for storage change
-        let storage_changeset_batch = storage_changeset
-            .walk_range(
-                TransitionIdAddress((from_transition_rev, Address::zero()))..
-                    TransitionIdAddress((to_transition_rev, Address::zero())),
-            )?
-            .collect::<Result<Vec<_>, _>>()?;
+        // // get all batches for storage change
+        // let storage_changeset_batch = storage_changeset
+        //     .walk_range(
+        //         TransitionIdAddress((from_transition_rev, Address::zero()))..
+        //             TransitionIdAddress((to_transition_rev, Address::zero())),
+        //     )?
+        //     .collect::<Result<Vec<_>, _>>()?;
 
-        // revert all changes to PlainStorage
-        let mut plain_storage_cursor = tx.cursor_dup_write::<tables::PlainStorageState>()?;
+        // // revert all changes to PlainStorage
+        // let mut plain_storage_cursor = tx.cursor_dup_write::<tables::PlainStorageState>()?;
 
-        for (key, storage) in storage_changeset_batch.into_iter().rev() {
-            let address = key.address();
-            if let Some(v) = plain_storage_cursor.seek_by_key_subkey(address, storage.key)? {
-                if v.key == storage.key {
-                    plain_storage_cursor.delete_current()?;
-                }
-            }
-            if storage.value != U256::ZERO {
-                plain_storage_cursor.upsert(address, storage)?;
-            }
-        }
+        // for (key, storage) in storage_changeset_batch.into_iter().rev() {
+        //     let address = key.address();
+        //     if let Some(v) = plain_storage_cursor.seek_by_key_subkey(address, storage.key)? {
+        //         if v.key == storage.key {
+        //             plain_storage_cursor.delete_current()?;
+        //         }
+        //     }
+        //     if storage.value != U256::ZERO {
+        //         plain_storage_cursor.upsert(address, storage)?;
+        //     }
+        // }
 
-        // Discard unwinded changesets
-        let mut rev_acc_changeset_walker = account_changeset.walk_back(None)?;
-        while let Some((transition_id, _)) = rev_acc_changeset_walker.next().transpose()? {
-            if transition_id < from_transition_rev {
-                break
-            }
-            // delete all changesets
-            tx.delete::<tables::AccountChangeSet>(transition_id, None)?;
-        }
+        // // Discard unwinded changesets
+        // let mut rev_acc_changeset_walker = account_changeset.walk_back(None)?;
+        // while let Some((transition_id, _)) = rev_acc_changeset_walker.next().transpose()? {
+        //     if transition_id < from_transition_rev {
+        //         break
+        //     }
+        //     // delete all changesets
+        //     tx.delete::<tables::AccountChangeSet>(transition_id, None)?;
+        // }
 
-        let mut rev_storage_changeset_walker = storage_changeset.walk_back(None)?;
-        while let Some((key, _)) = rev_storage_changeset_walker.next().transpose()? {
-            if key.transition_id() < from_transition_rev {
-                break
-            }
-            // delete all changesets
-            tx.delete::<tables::StorageChangeSet>(key, None)?;
-        }
+        // let mut rev_storage_changeset_walker = storage_changeset.walk_back(None)?;
+        // while let Some((key, _)) = rev_storage_changeset_walker.next().transpose()? {
+        //     if key.transition_id() < from_transition_rev {
+        //         break
+        //     }
+        //     // delete all changesets
+        //     tx.delete::<tables::StorageChangeSet>(key, None)?;
+        // }
 
-        Ok(UnwindOutput { stage_progress: input.unwind_to })
+        // Ok(UnwindOutput { stage_progress: input.unwind_to })
     }
 }
 
@@ -438,18 +446,18 @@ mod tests {
         let balance = U256::from(0x3635c9adc5dea00000u128);
         let code_hash = keccak256(code);
         db_tx
-            .put2::<tables::PlainAccountState>(
+            .put::<tables::PlainAccountState>(
                 acc1,
                 Account { nonce: 0, balance: U256::ZERO, bytecode_hash: Some(code_hash) },
             )
             .unwrap();
         db_tx
-            .put2::<tables::PlainAccountState>(
+            .put::<tables::PlainAccountState>(
                 acc2,
                 Account { nonce: 0, balance, bytecode_hash: None },
             )
             .unwrap();
-        db_tx.put2::<tables::Bytecodes>(code_hash, code.to_vec()).unwrap();
+        db_tx.put::<tables::Bytecodes>(code_hash, code.to_vec()).unwrap();
         tx.commit().unwrap();
 
         // execute
@@ -534,9 +542,9 @@ mod tests {
         let acc2 = H160(hex!("a94f5374fce5edbc8e2a8697c15331677e6ebf0b"));
         let acc2_info = Account { nonce: 0, balance, bytecode_hash: None };
 
-        db_tx.put2::<tables::PlainAccountState>(acc1, acc1_info).unwrap();
-        db_tx.put2::<tables::PlainAccountState>(acc2, acc2_info).unwrap();
-        db_tx.put2::<tables::Bytecodes>(code_hash, code.to_vec()).unwrap();
+        db_tx.put::<tables::PlainAccountState>(acc1, acc1_info).unwrap();
+        db_tx.put::<tables::PlainAccountState>(acc2, acc2_info).unwrap();
+        db_tx.put::<tables::Bytecodes>(code_hash, code.to_vec()).unwrap();
         tx.commit().unwrap();
 
         // execute
@@ -608,18 +616,18 @@ mod tests {
             Account { nonce: 0, balance: U256::ZERO, bytecode_hash: Some(code_hash) };
 
         // set account
-        db_tx.put2::<tables::PlainAccountState>(caller_address, caller_info).unwrap();
-        db_tx.put2::<tables::PlainAccountState>(destroyed_address, destroyed_info).unwrap();
-        db_tx.put2::<tables::Bytecodes>(code_hash, code.to_vec()).unwrap();
+        db_tx.put::<tables::PlainAccountState>(caller_address, caller_info).unwrap();
+        db_tx.put::<tables::PlainAccountState>(destroyed_address, destroyed_info).unwrap();
+        db_tx.put::<tables::Bytecodes>(code_hash, code.to_vec()).unwrap();
         // set storage to check when account gets destroyed.
         db_tx
-            .put2::<tables::PlainStorageState>(
+            .put::<tables::PlainStorageState>(
                 destroyed_address,
                 StorageEntry { key: H256::zero(), value: U256::ZERO },
             )
             .unwrap();
         db_tx
-            .put2::<tables::PlainStorageState>(
+            .put::<tables::PlainStorageState>(
                 destroyed_address,
                 StorageEntry { key: H256::from_low_u64_be(1), value: U256::from(1u64) },
             )

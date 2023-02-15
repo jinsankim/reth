@@ -131,32 +131,32 @@ where
         tx: &Transaction<'_, DB>,
         headers: Vec<SealedHeader>,
     ) -> Result<Option<BlockNumber>, StageError> {
-        trace!(target: "sync::stages::headers", len = headers.len(), "writing headers");
-
-        let mut cursor_header = tx.cursor_write::<tables::Headers>()?;
-        let mut cursor_canonical = tx.cursor_write::<tables::CanonicalHeaders>()?;
-
         // TODO cursor
+        todo!()
+        // trace!(target: "sync::stages::headers", len = headers.len(), "writing headers");
 
-        let mut latest = None;
-        // Since the headers were returned in descending order,
-        // iterate them in the reverse order
-        for header in headers.into_iter().rev() {
-            if header.number == 0 {
-                continue
-            }
+        // let mut cursor_header = tx.cursor_write::<tables::Headers>()?;
+        // let mut cursor_canonical = tx.cursor_write::<tables::CanonicalHeaders>()?;
 
-            let header_hash = header.hash();
-            let header_number = header.number;
-            let header = header.unseal();
-            latest = Some(header.number);
+        // let mut latest = None;
+        // // Since the headers were returned in descending order,
+        // // iterate them in the reverse order
+        // for header in headers.into_iter().rev() {
+        //     if header.number == 0 {
+        //         continue
+        //     }
 
-            // NOTE: HeaderNumbers are not sorted and can't be inserted with cursor.
-            tx.put2::<tables::HeaderNumbers>(header_hash, header_number)?;
-            cursor_header.insert(header_number, header)?;
-            cursor_canonical.insert(header_number, header_hash)?;
-        }
-        Ok(latest)
+        //     let header_hash = header.hash();
+        //     let header_number = header.number;
+        //     let header = header.unseal();
+        //     latest = Some(header.number);
+
+        //     // NOTE: HeaderNumbers are not sorted and can't be inserted with cursor.
+        //     tx.put2::<tables::HeaderNumbers>(header_hash, header_number)?;
+        //     cursor_header.insert(header_number, header)?;
+        //     cursor_canonical.insert(header_number, header_hash)?;
+        // }
+        // Ok(latest)
     }
 }
 

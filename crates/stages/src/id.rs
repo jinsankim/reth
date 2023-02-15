@@ -37,7 +37,8 @@ impl StageId {
         block: BlockNumber,
     ) -> Result<(), DbError> {
         // TODO cursor
-        tx.put2::<SyncStage>(self.0.as_bytes().to_vec(), block)
+        todo!()
+        // tx.put2::<SyncStage>(self.0.as_bytes().to_vec(), block)
     }
 }
 

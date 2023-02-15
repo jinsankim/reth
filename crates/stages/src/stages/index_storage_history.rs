@@ -45,75 +45,77 @@ impl<DB: Database> Stage<DB> for IndexStorageHistoryStage {
         tx: &mut Transaction<'_, DB>,
         input: ExecInput,
     ) -> Result<ExecOutput, StageError> {
-        let stage_progress = input.stage_progress.unwrap_or_default();
-        let previous_stage_progress = input.previous_stage_progress();
-
-        // read storge changeset, merge it into one changeset and calculate account hashes.
-        let from_transition = tx.get_block_transition(stage_progress)?;
-
-        // NOTE: can probably done more probabilistic take of bundles with transition but it is
-        // guess game for later. Transitions better reflect amount of work.
-        let to_block =
-            std::cmp::min(stage_progress + self.commit_threshold, previous_stage_progress);
-        let to_transition = tx.get_block_transition(to_block)?;
-
-        let storage_chageset = tx
-            .cursor_read::<tables::StorageChangeSet>()?
-            .walk(Some((from_transition, Address::zero()).into()))?
-            .take_while(|res| {
-                res.as_ref().map(|(k, _)| k.transition_id() < to_transition).unwrap_or_default()
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        // fold all storages to one set of changes
-        let storage_changeset_lists = storage_chageset.into_iter().fold(
-            BTreeMap::new(),
-            |mut storages: BTreeMap<(Address, H256), Vec<u64>>, (index, storage)| {
-                storages
-                    .entry((index.address(), storage.key))
-                    .or_default()
-                    .push(index.transition_id());
-                storages
-            },
-        );
-
         // TODO cursor
+        todo!()
+        // let stage_progress = input.stage_progress.unwrap_or_default();
+        // let previous_stage_progress = input.previous_stage_progress();
 
-        for ((address, storage_key), mut indices) in storage_changeset_lists {
-            let mut last_shard = take_last_storage_shard(tx, address, storage_key)?;
-            last_shard.append(&mut indices);
+        // // read storge changeset, merge it into one changeset and calculate account hashes.
+        // let from_transition = tx.get_block_transition(stage_progress)?;
 
-            // chunk indices and insert them in shards of N size.
-            let mut chunks = last_shard
-                .iter()
-                .chunks(NUM_OF_INDICES_IN_SHARD)
-                .into_iter()
-                .map(|chunks| chunks.map(|i| *i as usize).collect::<Vec<usize>>())
-                .collect::<Vec<_>>();
-            let last_chunk = chunks.pop();
+        // // NOTE: can probably done more probabilistic take of bundles with transition but it is
+        // // guess game for later. Transitions better reflect amount of work.
+        // let to_block =
+        //     std::cmp::min(stage_progress + self.commit_threshold, previous_stage_progress);
+        // let to_transition = tx.get_block_transition(to_block)?;
 
-            // chunk indices and insert them in shards of N size.
-            chunks.into_iter().try_for_each(|list| {
-                tx.put2::<tables::StorageHistory>(
-                    StorageShardedKey::new(
-                        address,
-                        storage_key,
-                        *list.last().expect("Chuck does not return empty list") as TransitionId,
-                    ),
-                    TransitionList::new(list).expect("Indices are presorted and not empty"),
-                )
-            })?;
-            // Insert last list with u64::MAX
-            if let Some(last_list) = last_chunk {
-                tx.put2::<tables::StorageHistory>(
-                    StorageShardedKey::new(address, storage_key, u64::MAX),
-                    TransitionList::new(last_list).expect("Indices are presorted and not empty"),
-                )?;
-            }
-        }
+        // let storage_chageset = tx
+        //     .cursor_read::<tables::StorageChangeSet>()?
+        //     .walk(Some((from_transition, Address::zero()).into()))?
+        //     .take_while(|res| {
+        //         res.as_ref().map(|(k, _)| k.transition_id() < to_transition).unwrap_or_default()
+        //     })
+        //     .collect::<Result<Vec<_>, _>>()?;
 
-        info!(target: "sync::stages::index_storage_history", "Stage finished");
-        Ok(ExecOutput { stage_progress: to_block, done: true })
+        // // fold all storages to one set of changes
+        // let storage_changeset_lists = storage_chageset.into_iter().fold(
+        //     BTreeMap::new(),
+        //     |mut storages: BTreeMap<(Address, H256), Vec<u64>>, (index, storage)| {
+        //         storages
+        //             .entry((index.address(), storage.key))
+        //             .or_default()
+        //             .push(index.transition_id());
+        //         storages
+        //     },
+        // );
+
+        // // TODO cursor
+
+        // for ((address, storage_key), mut indices) in storage_changeset_lists {
+        //     let mut last_shard = take_last_storage_shard(tx, address, storage_key)?;
+        //     last_shard.append(&mut indices);
+
+        //     // chunk indices and insert them in shards of N size.
+        //     let mut chunks = last_shard
+        //         .iter()
+        //         .chunks(NUM_OF_INDICES_IN_SHARD)
+        //         .into_iter()
+        //         .map(|chunks| chunks.map(|i| *i as usize).collect::<Vec<usize>>())
+        //         .collect::<Vec<_>>();
+        //     let last_chunk = chunks.pop();
+
+        //     // chunk indices and insert them in shards of N size.
+        //     chunks.into_iter().try_for_each(|list| {
+        //         tx.put2::<tables::StorageHistory>(
+        //             StorageShardedKey::new(
+        //                 address,
+        //                 storage_key,
+        //                 *list.last().expect("Chuck does not return empty list") as TransitionId,
+        //             ),
+        //             TransitionList::new(list).expect("Indices are presorted and not empty"),
+        //         )
+        //     })?;
+        //     // Insert last list with u64::MAX
+        //     if let Some(last_list) = last_chunk {
+        //         tx.put2::<tables::StorageHistory>(
+        //             StorageShardedKey::new(address, storage_key, u64::MAX),
+        //             TransitionList::new(last_list).expect("Indices are presorted and not empty"),
+        //         )?;
+        //     }
+        // }
+
+        // info!(target: "sync::stages::index_storage_history", "Stage finished");
+        // Ok(ExecOutput { stage_progress: to_block, done: true })
     }
 
     /// Unwind the stage.
@@ -122,47 +124,51 @@ impl<DB: Database> Stage<DB> for IndexStorageHistoryStage {
         tx: &mut Transaction<'_, DB>,
         input: UnwindInput,
     ) -> Result<UnwindOutput, StageError> {
-        info!(target: "sync::stages::index_account_history", to_block = input.unwind_to, "Unwinding");
-        let from_transition_rev = tx.get_block_transition(input.unwind_to)?;
-        let to_transition_rev = tx.get_block_transition(input.stage_progress)?;
+        // TODO cursor
+        todo!()
+        // info!(target: "sync::stages::index_account_history", to_block = input.unwind_to,
+        // "Unwinding"); let from_transition_rev =
+        // tx.get_block_transition(input.unwind_to)?; let to_transition_rev =
+        // tx.get_block_transition(input.stage_progress)?;
 
-        let mut cursor = tx.cursor_write::<tables::StorageHistory>()?;
+        // let mut cursor = tx.cursor_write::<tables::StorageHistory>()?;
 
-        let storage_changesets = tx
-            .cursor_read::<tables::StorageChangeSet>()?
-            .walk(Some((from_transition_rev, Address::zero()).into()))?
-            .take_while(|res| {
-                res.as_ref().map(|(k, _)| k.transition_id() < to_transition_rev).unwrap_or_default()
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let last_indices = storage_changesets
-            .into_iter()
-            // reverse so we can get lowest transition id where we need to unwind account.
-            .rev()
-            // fold all storages and get last transition index
-            .fold(
-                BTreeMap::new(),
-                |mut accounts: BTreeMap<(Address, H256), u64>, (index, storage)| {
-                    // we just need address and lowest transition id.
-                    accounts.insert((index.address(), storage.key), index.transition_id());
-                    accounts
-                },
-            );
-        for ((address, storage_key), rem_index) in last_indices {
-            let shard_part =
-                unwind_storage_history_shards::<DB>(&mut cursor, address, storage_key, rem_index)?;
+        // let storage_changesets = tx
+        //     .cursor_read::<tables::StorageChangeSet>()?
+        //     .walk(Some((from_transition_rev, Address::zero()).into()))?
+        //     .take_while(|res| {
+        //         res.as_ref().map(|(k, _)| k.transition_id() <
+        // to_transition_rev).unwrap_or_default()     })
+        //     .collect::<Result<Vec<_>, _>>()?;
+        // let last_indices = storage_changesets
+        //     .into_iter()
+        //     // reverse so we can get lowest transition id where we need to unwind account.
+        //     .rev()
+        //     // fold all storages and get last transition index
+        //     .fold(
+        //         BTreeMap::new(),
+        //         |mut accounts: BTreeMap<(Address, H256), u64>, (index, storage)| {
+        //             // we just need address and lowest transition id.
+        //             accounts.insert((index.address(), storage.key), index.transition_id());
+        //             accounts
+        //         },
+        //     );
+        // for ((address, storage_key), rem_index) in last_indices {
+        //     let shard_part =
+        //         unwind_storage_history_shards::<DB>(&mut cursor, address, storage_key,
+        // rem_index)?;
 
-            // check last shard_part, if present, items needs to be reinserted.
-            if !shard_part.is_empty() {
-                // there are items in list
-                tx.put2::<tables::StorageHistory>(
-                    StorageShardedKey::new(address, storage_key, u64::MAX),
-                    TransitionList::new(shard_part)
-                        .expect("There is at least one element in list and it is sorted."),
-                )?;
-            }
-        }
-        Ok(UnwindOutput { stage_progress: input.unwind_to })
+        //     // check last shard_part, if present, items needs to be reinserted.
+        //     if !shard_part.is_empty() {
+        //         // there are items in list
+        //         tx.put2::<tables::StorageHistory>(
+        //             StorageShardedKey::new(address, storage_key, u64::MAX),
+        //             TransitionList::new(shard_part)
+        //                 .expect("There is at least one element in list and it is sorted."),
+        //         )?;
+        //     }
+        // }
+        // Ok(UnwindOutput { stage_progress: input.unwind_to })
     }
 }
 
@@ -272,12 +278,12 @@ mod tests {
         // setup
         tx.commit(|tx| {
             // we just need first and last
-            tx.put2::<tables::BlockTransitionIndex>(0, 3).unwrap();
-            tx.put2::<tables::BlockTransitionIndex>(5, 7).unwrap();
+            tx.put::<tables::BlockTransitionIndex>(0, 3).unwrap();
+            tx.put::<tables::BlockTransitionIndex>(5, 7).unwrap();
 
             // setup changeset that are going to be applied to history index
-            tx.put2::<tables::StorageChangeSet>(trns(4), storage(STORAGE_KEY)).unwrap();
-            tx.put2::<tables::StorageChangeSet>(trns(6), storage(STORAGE_KEY)).unwrap();
+            tx.put::<tables::StorageChangeSet>(trns(4), storage(STORAGE_KEY)).unwrap();
+            tx.put::<tables::StorageChangeSet>(trns(6), storage(STORAGE_KEY)).unwrap();
             Ok(())
         })
         .unwrap()
@@ -335,7 +341,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put2::<tables::StorageHistory>(shard(u64::MAX), list(&[1, 2, 3])).unwrap();
+            tx.put::<tables::StorageHistory>(shard(u64::MAX), list(&[1, 2, 3])).unwrap();
             Ok(())
         })
         .unwrap();
@@ -368,7 +374,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put2::<tables::StorageHistory>(shard(u64::MAX), list(&full_list)).unwrap();
+            tx.put::<tables::StorageHistory>(shard(u64::MAX), list(&full_list)).unwrap();
             Ok(())
         })
         .unwrap();
@@ -400,7 +406,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put2::<tables::StorageHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
+            tx.put::<tables::StorageHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
             Ok(())
         })
         .unwrap();
@@ -435,7 +441,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put2::<tables::StorageHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
+            tx.put::<tables::StorageHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
             Ok(())
         })
         .unwrap();
@@ -469,9 +475,9 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put2::<tables::StorageHistory>(shard(1), list(&full_list)).unwrap();
-            tx.put2::<tables::StorageHistory>(shard(2), list(&full_list)).unwrap();
-            tx.put2::<tables::StorageHistory>(shard(u64::MAX), list(&[2, 3])).unwrap();
+            tx.put::<tables::StorageHistory>(shard(1), list(&full_list)).unwrap();
+            tx.put::<tables::StorageHistory>(shard(2), list(&full_list)).unwrap();
+            tx.put::<tables::StorageHistory>(shard(u64::MAX), list(&[2, 3])).unwrap();
             Ok(())
         })
         .unwrap();

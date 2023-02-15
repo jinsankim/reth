@@ -70,7 +70,6 @@ impl<DB: Database, D: BodyDownloader> Stage<DB> for BodyStage<D> {
     fn id(&self) -> StageId {
         BODIES
     }
-    // TODO cursor
 
     /// Download block bodies from the last checkpoint for this stage up until the latest synced
     /// header, limited by the stage's batch size.
@@ -79,6 +78,7 @@ impl<DB: Database, D: BodyDownloader> Stage<DB> for BodyStage<D> {
         tx: &mut Transaction<'_, DB>,
         input: ExecInput,
     ) -> Result<ExecOutput, StageError> {
+        // TODO cursor
         let (start_block, end_block) = exec_or_return!(input, "sync::stages::bodies");
 
         // Update the header range on the downloader
@@ -527,20 +527,20 @@ mod tests {
                         };
                         body.tx_id_range().try_for_each(|tx_id| {
                             let transaction = random_signed_tx();
-                            tx.put2::<tables::Transactions>(tx_id, transaction)?;
-                            tx.put2::<tables::TxTransitionIndex>(tx_id, tx_id)
+                            tx.put::<tables::Transactions>(tx_id, transaction)?;
+                            tx.put::<tables::TxTransitionIndex>(tx_id, tx_id)
                         })?;
 
                         let last_transition_id = progress.body.len() as u64;
                         let block_transition_id = last_transition_id + 1; // for block reward
 
-                        tx.put2::<tables::BlockTransitionIndex>(
+                        tx.put::<tables::BlockTransitionIndex>(
                             progress.number,
                             block_transition_id,
                         )?;
-                        tx.put2::<tables::BlockBodies>(progress.number, body)?;
+                        tx.put::<tables::BlockBodies>(progress.number, body)?;
                         if !progress.ommers_hash_is_empty() {
-                            tx.put2::<tables::BlockOmmers>(
+                            tx.put::<tables::BlockOmmers>(
                                 progress.number,
                                 StoredBlockOmmers {
                                     ommers: progress

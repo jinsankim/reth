@@ -214,7 +214,7 @@ mod tests {
                     .map(|(_, v)| v)
                     .unwrap_or_default()
                     .into();
-                tx.put2::<tables::HeaderTD>(head.number, (td + head.difficulty).into())
+                tx.put::<tables::HeaderTD>(head.number, (td + head.difficulty).into())
             })?;
 
             // use previous progress as seed size

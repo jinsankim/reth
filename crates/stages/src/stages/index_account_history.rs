@@ -47,67 +47,67 @@ impl<DB: Database> Stage<DB> for IndexAccountHistoryStage {
         input: ExecInput,
     ) -> Result<ExecOutput, StageError> {
         // TODO cursor
+        todo!()
+        // let stage_progress = input.stage_progress.unwrap_or_default();
+        // let previous_stage_progress = input.previous_stage_progress();
 
-        let stage_progress = input.stage_progress.unwrap_or_default();
-        let previous_stage_progress = input.previous_stage_progress();
+        // // read account changeset, merge it into one changeset and calculate account hashes.
+        // let from_transition = tx.get_block_transition(stage_progress)?;
+        // // NOTE: can probably done more probabilistic take of bundles with transition but it is
+        // // guess game for later. Transitions better reflect amount of work.
+        // let to_block =
+        //     std::cmp::min(stage_progress + self.commit_threshold, previous_stage_progress);
+        // let to_transition = tx.get_block_transition(to_block)?;
 
-        // read account changeset, merge it into one changeset and calculate account hashes.
-        let from_transition = tx.get_block_transition(stage_progress)?;
-        // NOTE: can probably done more probabilistic take of bundles with transition but it is
-        // guess game for later. Transitions better reflect amount of work.
-        let to_block =
-            std::cmp::min(stage_progress + self.commit_threshold, previous_stage_progress);
-        let to_transition = tx.get_block_transition(to_block)?;
+        // let account_changesets = tx
+        //     .cursor_read::<tables::AccountChangeSet>()?
+        //     .walk(Some(from_transition))?
+        //     .take_while(|res| res.as_ref().map(|(k, _)| *k < to_transition).unwrap_or_default())
+        //     .collect::<Result<Vec<_>, _>>()?;
 
-        let account_changesets = tx
-            .cursor_read::<tables::AccountChangeSet>()?
-            .walk(Some(from_transition))?
-            .take_while(|res| res.as_ref().map(|(k, _)| *k < to_transition).unwrap_or_default())
-            .collect::<Result<Vec<_>, _>>()?;
+        // let account_changeset_lists = account_changesets
+        //     .into_iter()
+        //     // fold all account to one set of changed accounts
+        //     .fold(
+        //         BTreeMap::new(),
+        //         |mut accounts: BTreeMap<Address, Vec<u64>>, (index, account)| {
+        //             accounts.entry(account.address).or_default().push(index);
+        //             accounts
+        //         },
+        //     );
+        // // insert indexes to AccontHistory.
+        // for (address, mut indices) in account_changeset_lists {
+        //     let mut last_shard = take_last_account_shard(tx, address)?;
+        //     last_shard.append(&mut indices);
+        //     // chunk indices and insert them in shards of N size.
+        //     let mut chunks = last_shard
+        //         .iter()
+        //         .chunks(NUM_OF_INDICES_IN_SHARD)
+        //         .into_iter()
+        //         .map(|chunks| chunks.map(|i| *i as usize).collect::<Vec<usize>>())
+        //         .collect::<Vec<_>>();
+        //     let last_chunk = chunks.pop();
 
-        let account_changeset_lists = account_changesets
-            .into_iter()
-            // fold all account to one set of changed accounts
-            .fold(
-                BTreeMap::new(),
-                |mut accounts: BTreeMap<Address, Vec<u64>>, (index, account)| {
-                    accounts.entry(account.address).or_default().push(index);
-                    accounts
-                },
-            );
-        // insert indexes to AccontHistory.
-        for (address, mut indices) in account_changeset_lists {
-            let mut last_shard = take_last_account_shard(tx, address)?;
-            last_shard.append(&mut indices);
-            // chunk indices and insert them in shards of N size.
-            let mut chunks = last_shard
-                .iter()
-                .chunks(NUM_OF_INDICES_IN_SHARD)
-                .into_iter()
-                .map(|chunks| chunks.map(|i| *i as usize).collect::<Vec<usize>>())
-                .collect::<Vec<_>>();
-            let last_chunk = chunks.pop();
+        //     chunks.into_iter().try_for_each(|list| {
+        //         tx.put2::<tables::AccountHistory>(
+        //             ShardedKey::new(
+        //                 address,
+        //                 *list.last().expect("Chuck does not return empty list") as TransitionId,
+        //             ),
+        //             TransitionList::new(list).expect("Indices are presorted and not empty"),
+        //         )
+        //     })?;
+        //     // Insert last list with u64::MAX
+        //     if let Some(last_list) = last_chunk {
+        //         tx.put2::<tables::AccountHistory>(
+        //             ShardedKey::new(address, u64::MAX),
+        //             TransitionList::new(last_list).expect("Indices are presorted and not empty"),
+        //         )?
+        //     }
+        // }
 
-            chunks.into_iter().try_for_each(|list| {
-                tx.put2::<tables::AccountHistory>(
-                    ShardedKey::new(
-                        address,
-                        *list.last().expect("Chuck does not return empty list") as TransitionId,
-                    ),
-                    TransitionList::new(list).expect("Indices are presorted and not empty"),
-                )
-            })?;
-            // Insert last list with u64::MAX
-            if let Some(last_list) = last_chunk {
-                tx.put2::<tables::AccountHistory>(
-                    ShardedKey::new(address, u64::MAX),
-                    TransitionList::new(last_list).expect("Indices are presorted and not empty"),
-                )?
-            }
-        }
-
-        info!(target: "sync::stages::index_account_history", "Stage finished");
-        Ok(ExecOutput { stage_progress: to_block, done: true })
+        // info!(target: "sync::stages::index_account_history", "Stage finished");
+        // Ok(ExecOutput { stage_progress: to_block, done: true })
     }
 
     /// Unwind the stage.
@@ -116,44 +116,48 @@ impl<DB: Database> Stage<DB> for IndexAccountHistoryStage {
         tx: &mut Transaction<'_, DB>,
         input: UnwindInput,
     ) -> Result<UnwindOutput, StageError> {
-        info!(target: "sync::stages::index_account_history", to_block = input.unwind_to, "Unwinding");
-        let from_transition_rev = tx.get_block_transition(input.unwind_to)?;
-        let to_transition_rev = tx.get_block_transition(input.stage_progress)?;
+        // TODO cursor
+        todo!()
+        // info!(target: "sync::stages::index_account_history", to_block = input.unwind_to,
+        // "Unwinding"); let from_transition_rev =
+        // tx.get_block_transition(input.unwind_to)?; let to_transition_rev =
+        // tx.get_block_transition(input.stage_progress)?;
 
-        let mut cursor = tx.cursor_write::<tables::AccountHistory>()?;
+        // let mut cursor = tx.cursor_write::<tables::AccountHistory>()?;
 
-        let account_changeset = tx
-            .cursor_read::<tables::AccountChangeSet>()?
-            .walk(Some(from_transition_rev))?
-            .take_while(|res| res.as_ref().map(|(k, _)| *k < to_transition_rev).unwrap_or_default())
-            .collect::<Result<Vec<_>, _>>()?;
+        // let account_changeset = tx
+        //     .cursor_read::<tables::AccountChangeSet>()?
+        //     .walk(Some(from_transition_rev))?
+        //     .take_while(|res| res.as_ref().map(|(k, _)| *k <
+        // to_transition_rev).unwrap_or_default())     .collect::<Result<Vec<_>, _>>()?;
 
-        let last_indices = account_changeset
-            .into_iter()
-            // reverse so we can get lowest transition id where we need to unwind account.
-            .rev()
-            // fold all account and get last transition index
-            .fold(BTreeMap::new(), |mut accounts: BTreeMap<Address, u64>, (index, account)| {
-                // we just need address and lowest transition id.
-                accounts.insert(account.address, index);
-                accounts
-            });
-        // try to unwind the index
-        for (address, rem_index) in last_indices {
-            let shard_part = unwind_account_history_shards::<DB>(&mut cursor, address, rem_index)?;
+        // let last_indices = account_changeset
+        //     .into_iter()
+        //     // reverse so we can get lowest transition id where we need to unwind account.
+        //     .rev()
+        //     // fold all account and get last transition index
+        //     .fold(BTreeMap::new(), |mut accounts: BTreeMap<Address, u64>, (index, account)| {
+        //         // we just need address and lowest transition id.
+        //         accounts.insert(account.address, index);
+        //         accounts
+        //     });
+        // // try to unwind the index
+        // for (address, rem_index) in last_indices {
+        //     let shard_part = unwind_account_history_shards::<DB>(&mut cursor, address,
+        // rem_index)?;
 
-            // check last shard_part, if present, items needs to be reinserted.
-            if !shard_part.is_empty() {
-                // there are items in list
-                tx.put2::<tables::AccountHistory>(
-                    ShardedKey::new(address, u64::MAX),
-                    TransitionList::new(shard_part)
-                        .expect("There is at least one element in list and it is sorted."),
-                )?;
-            }
-        }
-        // from HistoryIndex higher than that number.
-        Ok(UnwindOutput { stage_progress: input.unwind_to })
+        //     // check last shard_part, if present, items needs to be reinserted.
+        //     if !shard_part.is_empty() {
+        //         // there are items in list
+        //         tx.put2::<tables::AccountHistory>(
+        //             ShardedKey::new(address, u64::MAX),
+        //             TransitionList::new(shard_part)
+        //                 .expect("There is at least one element in list and it is sorted."),
+        //         )?;
+        //     }
+        // }
+        // // from HistoryIndex higher than that number.
+        // Ok(UnwindOutput { stage_progress: input.unwind_to })
     }
 }
 
@@ -248,12 +252,12 @@ mod tests {
         // setup
         tx.commit(|tx| {
             // we just need first and last
-            tx.put2::<tables::BlockTransitionIndex>(0, 3).unwrap();
-            tx.put2::<tables::BlockTransitionIndex>(5, 7).unwrap();
+            tx.put::<tables::BlockTransitionIndex>(0, 3).unwrap();
+            tx.put::<tables::BlockTransitionIndex>(5, 7).unwrap();
 
             // setup changeset that are going to be applied to history index
-            tx.put2::<tables::AccountChangeSet>(4, acc()).unwrap();
-            tx.put2::<tables::AccountChangeSet>(6, acc()).unwrap();
+            tx.put::<tables::AccountChangeSet>(4, acc()).unwrap();
+            tx.put::<tables::AccountChangeSet>(6, acc()).unwrap();
             Ok(())
         })
         .unwrap()
@@ -311,7 +315,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put2::<tables::AccountHistory>(shard(u64::MAX), list(&[1, 2, 3])).unwrap();
+            tx.put::<tables::AccountHistory>(shard(u64::MAX), list(&[1, 2, 3])).unwrap();
             Ok(())
         })
         .unwrap();
@@ -340,7 +344,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put2::<tables::AccountHistory>(shard(u64::MAX), list(&full_list)).unwrap();
+            tx.put::<tables::AccountHistory>(shard(u64::MAX), list(&full_list)).unwrap();
             Ok(())
         })
         .unwrap();
@@ -372,7 +376,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put2::<tables::AccountHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
+            tx.put::<tables::AccountHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
             Ok(())
         })
         .unwrap();
@@ -407,7 +411,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put2::<tables::AccountHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
+            tx.put::<tables::AccountHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
             Ok(())
         })
         .unwrap();
@@ -441,9 +445,9 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put2::<tables::AccountHistory>(shard(1), list(&full_list)).unwrap();
-            tx.put2::<tables::AccountHistory>(shard(2), list(&full_list)).unwrap();
-            tx.put2::<tables::AccountHistory>(shard(u64::MAX), list(&[2, 3])).unwrap();
+            tx.put::<tables::AccountHistory>(shard(1), list(&full_list)).unwrap();
+            tx.put::<tables::AccountHistory>(shard(2), list(&full_list)).unwrap();
+            tx.put::<tables::AccountHistory>(shard(u64::MAX), list(&[2, 3])).unwrap();
             Ok(())
         })
         .unwrap();

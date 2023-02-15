@@ -20,65 +20,66 @@ pub fn insert_block<'a, TX: DbTxMut<'a> + DbTx<'a>>(
     parent_tx_num_transition_id: Option<(u64, u64)>,
 ) -> Result<()> {
     // TODO cursor
-    tx.put2::<tables::CanonicalHeaders>(block.number, block.hash())?;
-    // Put header with canonical hashes.
-    tx.put2::<tables::Headers>(block.number, block.header.as_ref().clone())?;
-    tx.put2::<tables::HeaderNumbers>(block.hash(), block.number)?;
-    tx.put2::<tables::HeaderTD>(
-        block.number,
-        if has_block_reward {
-            U256::ZERO
-        } else {
-            U256::from(58_750_000_000_000_000_000_000_u128) + block.difficulty
-        }
-        .into(),
-    )?;
+    todo!()
+    // tx.put2::<tables::CanonicalHeaders>(block.number, block.hash())?;
+    // // Put header with canonical hashes.
+    // tx.put2::<tables::Headers>(block.number, block.header.as_ref().clone())?;
+    // tx.put2::<tables::HeaderNumbers>(block.hash(), block.number)?;
+    // tx.put2::<tables::HeaderTD>(
+    //     block.number,
+    //     if has_block_reward {
+    //         U256::ZERO
+    //     } else {
+    //         U256::from(58_750_000_000_000_000_000_000_u128) + block.difficulty
+    //     }
+    //     .into(),
+    // )?;
 
-    // insert body ommers data
-    if !block.ommers.is_empty() {
-        tx.put2::<tables::BlockOmmers>(
-            block.number,
-            StoredBlockOmmers { ommers: block.ommers.iter().map(|h| h.as_ref().clone()).collect() },
-        )?;
-    }
+    // // insert body ommers data
+    // if !block.ommers.is_empty() {
+    //     tx.put2::<tables::BlockOmmers>(
+    //         block.number,
+    //         StoredBlockOmmers { ommers: block.ommers.iter().map(|h| h.as_ref().clone()).collect()
+    // },     )?;
+    // }
 
-    let (mut current_tx_id, mut transition_id) =
-        if let Some(parent_tx_num_transition_id) = parent_tx_num_transition_id {
-            parent_tx_num_transition_id
-        } else if block.number == 0 {
-            (0, 0)
-        } else {
-            let prev_block_num = block.number - 1;
-            let prev_body = tx
-                .get::<tables::BlockBodies>(prev_block_num)?
-                .ok_or(ProviderError::BlockBody { number: prev_block_num })?;
-            let last_transition_id = tx
-                .get::<tables::BlockTransitionIndex>(prev_block_num)?
-                .ok_or(ProviderError::BlockTransition { block_number: prev_block_num })?;
-            (prev_body.start_tx_id + prev_body.tx_count, last_transition_id)
-        };
+    // let (mut current_tx_id, mut transition_id) =
+    //     if let Some(parent_tx_num_transition_id) = parent_tx_num_transition_id {
+    //         parent_tx_num_transition_id
+    //     } else if block.number == 0 {
+    //         (0, 0)
+    //     } else {
+    //         let prev_block_num = block.number - 1;
+    //         let prev_body = tx
+    //             .get::<tables::BlockBodies>(prev_block_num)?
+    //             .ok_or(ProviderError::BlockBody { number: prev_block_num })?;
+    //         let last_transition_id = tx
+    //             .get::<tables::BlockTransitionIndex>(prev_block_num)?
+    //             .ok_or(ProviderError::BlockTransition { block_number: prev_block_num })?;
+    //         (prev_body.start_tx_id + prev_body.tx_count, last_transition_id)
+    //     };
 
-    // insert body data
-    tx.put2::<tables::BlockBodies>(
-        block.number,
-        StoredBlockBody { start_tx_id: current_tx_id, tx_count: block.body.len() as u64 },
-    )?;
+    // // insert body data
+    // tx.put2::<tables::BlockBodies>(
+    //     block.number,
+    //     StoredBlockBody { start_tx_id: current_tx_id, tx_count: block.body.len() as u64 },
+    // )?;
 
-    for transaction in block.body.iter() {
-        let rec_tx = transaction.clone().into_ecrecovered().unwrap();
-        tx.put2::<tables::TxSenders>(current_tx_id, rec_tx.signer())?;
-        tx.put2::<tables::Transactions>(current_tx_id, rec_tx.into())?;
-        tx.put2::<tables::TxTransitionIndex>(current_tx_id, transition_id)?;
-        transition_id += 1;
-        current_tx_id += 1;
-    }
+    // for transaction in block.body.iter() {
+    //     let rec_tx = transaction.clone().into_ecrecovered().unwrap();
+    //     tx.put2::<tables::TxSenders>(current_tx_id, rec_tx.signer())?;
+    //     tx.put2::<tables::Transactions>(current_tx_id, rec_tx.into())?;
+    //     tx.put2::<tables::TxTransitionIndex>(current_tx_id, transition_id)?;
+    //     transition_id += 1;
+    //     current_tx_id += 1;
+    // }
 
-    if has_block_reward {
-        transition_id += 1;
-    }
-    tx.put2::<tables::BlockTransitionIndex>(block.number, transition_id)?;
+    // if has_block_reward {
+    //     transition_id += 1;
+    // }
+    // tx.put2::<tables::BlockTransitionIndex>(block.number, transition_id)?;
 
-    Ok(())
+    // Ok(())
 }
 
 /// Inserts canonical block in blockchain. Parent tx num and transition id is taken from

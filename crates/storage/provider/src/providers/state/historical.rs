@@ -175,12 +175,12 @@ mod tests {
         let db = create_test_rw_db();
         let tx = db.tx_mut().unwrap();
 
-        tx.put2::<tables::AccountHistory>(
+        tx.put::<tables::AccountHistory>(
             ShardedKey { key: ADDRESS, highest_transition_id: 7 },
             TransitionList::new([3, 7]).unwrap(),
         )
         .unwrap();
-        tx.put2::<tables::AccountHistory>(
+        tx.put::<tables::AccountHistory>(
             ShardedKey { key: ADDRESS, highest_transition_id: u64::MAX },
             TransitionList::new([10, 15]).unwrap(),
         )
@@ -193,29 +193,29 @@ mod tests {
         let acc_at3 = Account { nonce: 3, balance: U256::ZERO, bytecode_hash: None };
 
         // setup
-        tx.put2::<tables::AccountChangeSet>(
+        tx.put::<tables::AccountChangeSet>(
             3,
             AccountBeforeTx { address: ADDRESS, info: Some(acc_at3) },
         )
         .unwrap();
-        tx.put2::<tables::AccountChangeSet>(
+        tx.put::<tables::AccountChangeSet>(
             7,
             AccountBeforeTx { address: ADDRESS, info: Some(acc_at7) },
         )
         .unwrap();
-        tx.put2::<tables::AccountChangeSet>(
+        tx.put::<tables::AccountChangeSet>(
             10,
             AccountBeforeTx { address: ADDRESS, info: Some(acc_at10) },
         )
         .unwrap();
-        tx.put2::<tables::AccountChangeSet>(
+        tx.put::<tables::AccountChangeSet>(
             15,
             AccountBeforeTx { address: ADDRESS, info: Some(acc_at15) },
         )
         .unwrap();
 
         // setup plain state
-        tx.put2::<tables::PlainAccountState>(ADDRESS, acc_plain).unwrap();
+        tx.put::<tables::PlainAccountState>(ADDRESS, acc_plain).unwrap();
         tx.commit().unwrap();
 
         let tx = db.tx().unwrap();
@@ -260,7 +260,7 @@ mod tests {
         let db = create_test_rw_db();
         let tx = db.tx_mut().unwrap();
 
-        tx.put2::<tables::StorageHistory>(
+        tx.put::<tables::StorageHistory>(
             StorageShardedKey {
                 address: ADDRESS,
                 sharded_key: ShardedKey { key: STORAGE, highest_transition_id: 7 },
@@ -268,7 +268,7 @@ mod tests {
             TransitionList::new([3, 7]).unwrap(),
         )
         .unwrap();
-        tx.put2::<tables::StorageHistory>(
+        tx.put::<tables::StorageHistory>(
             StorageShardedKey {
                 address: ADDRESS,
                 sharded_key: ShardedKey { key: STORAGE, highest_transition_id: u64::MAX },
@@ -284,13 +284,13 @@ mod tests {
         let entry_at3 = StorageEntry { key: STORAGE, value: U256::from(0) };
 
         // setup
-        tx.put2::<tables::StorageChangeSet>((3, ADDRESS).into(), entry_at3).unwrap();
-        tx.put2::<tables::StorageChangeSet>((7, ADDRESS).into(), entry_at7).unwrap();
-        tx.put2::<tables::StorageChangeSet>((10, ADDRESS).into(), entry_at10).unwrap();
-        tx.put2::<tables::StorageChangeSet>((15, ADDRESS).into(), entry_at15).unwrap();
+        tx.put::<tables::StorageChangeSet>((3, ADDRESS).into(), entry_at3).unwrap();
+        tx.put::<tables::StorageChangeSet>((7, ADDRESS).into(), entry_at7).unwrap();
+        tx.put::<tables::StorageChangeSet>((10, ADDRESS).into(), entry_at10).unwrap();
+        tx.put::<tables::StorageChangeSet>((15, ADDRESS).into(), entry_at15).unwrap();
 
         // setup plain state
-        tx.put2::<tables::PlainStorageState>(ADDRESS, entry_plain).unwrap();
+        tx.put::<tables::PlainStorageState>(ADDRESS, entry_plain).unwrap();
         tx.commit().unwrap();
 
         let tx = db.tx().unwrap();

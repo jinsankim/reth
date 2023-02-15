@@ -64,40 +64,41 @@ impl AccountInfoChangeSet {
         has_state_clear_eip: bool,
     ) -> Result<(), DbError> {
         // TODO cursor
-        match self {
-            AccountInfoChangeSet::Changed { old, new } => {
-                // insert old account in AccountChangeSet
-                // check for old != new was already done
-                tx.put2::<tables::AccountChangeSet>(
-                    tx_index,
-                    AccountBeforeTx { address, info: Some(old) },
-                )?;
-                tx.put2::<tables::PlainAccountState>(address, new)?;
-            }
-            AccountInfoChangeSet::Created { new } => {
-                // Ignore account that are created empty and state clear (SpuriousDragon) hardfork
-                // is activated.
-                if has_state_clear_eip && new.is_empty() {
-                    return Ok(())
-                }
-                tx.put2::<tables::AccountChangeSet>(
-                    tx_index,
-                    AccountBeforeTx { address, info: None },
-                )?;
-                tx.put2::<tables::PlainAccountState>(address, new)?;
-            }
-            AccountInfoChangeSet::Destroyed { old } => {
-                tx.delete::<tables::PlainAccountState>(address, None)?;
-                tx.put2::<tables::AccountChangeSet>(
-                    tx_index,
-                    AccountBeforeTx { address, info: Some(old) },
-                )?;
-            }
-            AccountInfoChangeSet::NoChange => {
-                // do nothing storage account didn't change
-            }
-        }
-        Ok(())
+        todo!()
+        // match self {
+        //     AccountInfoChangeSet::Changed { old, new } => {
+        //         // insert old account in AccountChangeSet
+        //         // check for old != new was already done
+        //         tx.put2::<tables::AccountChangeSet>(
+        //             tx_index,
+        //             AccountBeforeTx { address, info: Some(old) },
+        //         )?;
+        //         tx.put2::<tables::PlainAccountState>(address, new)?;
+        //     }
+        //     AccountInfoChangeSet::Created { new } => {
+        //         // Ignore account that are created empty and state clear (SpuriousDragon)
+        // hardfork         // is activated.
+        //         if has_state_clear_eip && new.is_empty() {
+        //             return Ok(())
+        //         }
+        //         tx.put2::<tables::AccountChangeSet>(
+        //             tx_index,
+        //             AccountBeforeTx { address, info: None },
+        //         )?;
+        //         tx.put2::<tables::PlainAccountState>(address, new)?;
+        //     }
+        //     AccountInfoChangeSet::Destroyed { old } => {
+        //         tx.delete::<tables::PlainAccountState>(address, None)?;
+        //         tx.put2::<tables::AccountChangeSet>(
+        //             tx_index,
+        //             AccountBeforeTx { address, info: Some(old) },
+        //         )?;
+        //     }
+        //     AccountInfoChangeSet::NoChange => {
+        //         // do nothing storage account didn't change
+        //     }
+        // }
+        // Ok(())
     }
 }
 

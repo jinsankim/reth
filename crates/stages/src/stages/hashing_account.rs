@@ -47,87 +47,88 @@ impl<DB: Database> Stage<DB> for AccountHashingStage {
         input: ExecInput,
     ) -> Result<ExecOutput, StageError> {
         // TODO cursor
-        let stage_progress = input.stage_progress.unwrap_or_default();
-        let previous_stage_progress = input.previous_stage_progress();
+        todo!()
+        // let stage_progress = input.stage_progress.unwrap_or_default();
+        // let previous_stage_progress = input.previous_stage_progress();
 
-        // read account changeset, merge it into one changeset and calculate account hashes.
-        let from_transition = tx.get_block_transition(stage_progress)?;
-        let to_transition = tx.get_block_transition(previous_stage_progress)?;
+        // // read account changeset, merge it into one changeset and calculate account hashes.
+        // let from_transition = tx.get_block_transition(stage_progress)?;
+        // let to_transition = tx.get_block_transition(previous_stage_progress)?;
 
-        // if there are more blocks then threshold it is faster to go over Plain state and hash all
-        // account otherwise take changesets aggregate the sets and apply hashing to
-        // AccountHashing table. Also, if we start from genesis, we need to hash from scratch, as
-        // genesis accounts are not in changeset.
-        if to_transition - from_transition > self.clean_threshold || stage_progress == 0 {
-            // clear table, load all accounts and hash it
-            tx.clear::<tables::HashedAccount>()?;
-            tx.commit()?;
+        // // if there are more blocks then threshold it is faster to go over Plain state and hash
+        // all // account otherwise take changesets aggregate the sets and apply hashing to
+        // // AccountHashing table. Also, if we start from genesis, we need to hash from scratch, as
+        // // genesis accounts are not in changeset.
+        // if to_transition - from_transition > self.clean_threshold || stage_progress == 0 {
+        //     // clear table, load all accounts and hash it
+        //     tx.clear::<tables::HashedAccount>()?;
+        //     tx.commit()?;
 
-            let mut first_key = None;
-            loop {
-                let next_key = {
-                    let mut accounts = tx.cursor_read::<tables::PlainAccountState>()?;
+        //     let mut first_key = None;
+        //     loop {
+        //         let next_key = {
+        //             let mut accounts = tx.cursor_read::<tables::PlainAccountState>()?;
 
-                    let hashed_batch = accounts
-                        .walk(first_key)?
-                        .take(self.commit_threshold as usize)
-                        .map(|res| res.map(|(address, account)| (keccak256(address), account)))
-                        .collect::<Result<BTreeMap<_, _>, _>>()?;
+        //             let hashed_batch = accounts
+        //                 .walk(first_key)?
+        //                 .take(self.commit_threshold as usize)
+        //                 .map(|res| res.map(|(address, account)| (keccak256(address), account)))
+        //                 .collect::<Result<BTreeMap<_, _>, _>>()?;
 
-                    // next key of iterator
-                    let next_key = accounts.next()?;
-                    // TODO
+        //             // next key of iterator
+        //             let next_key = accounts.next()?;
+        //             // TODO
 
-                    // iterate and put presorted hashed accounts
-                    hashed_batch
-                        .into_iter()
-                        .try_for_each(|(k, v)| tx.put2::<tables::HashedAccount>(k, v))?;
-                    next_key
-                };
-                tx.commit()?;
-                if let Some((next_key, _)) = next_key {
-                    first_key = Some(next_key);
-                    continue
-                }
-                break
-            }
-        } else {
-            let mut plain_accounts = tx.cursor_read::<tables::PlainAccountState>()?;
-            let mut hashed_accounts = tx.cursor_write::<tables::HashedAccount>()?;
+        //             // iterate and put presorted hashed accounts
+        //             hashed_batch
+        //                 .into_iter()
+        //                 .try_for_each(|(k, v)| tx.put2::<tables::HashedAccount>(k, v))?;
+        //             next_key
+        //         };
+        //         tx.commit()?;
+        //         if let Some((next_key, _)) = next_key {
+        //             first_key = Some(next_key);
+        //             continue
+        //         }
+        //         break
+        //     }
+        // } else {
+        //     let mut plain_accounts = tx.cursor_read::<tables::PlainAccountState>()?;
+        //     let mut hashed_accounts = tx.cursor_write::<tables::HashedAccount>()?;
 
-            // Aggregate all transition changesets and and make list of account that have been
-            // changed.
-            tx.cursor_read::<tables::AccountChangeSet>()?
-                .walk_range(from_transition..to_transition)?
-                .collect::<Result<Vec<_>, _>>()?
-                .into_iter()
-                // fold all account to one set of changed accounts
-                .fold(BTreeSet::new(), |mut accounts: BTreeSet<Address>, (_, account_before)| {
-                    accounts.insert(account_before.address);
-                    accounts
-                })
-                .into_iter()
-                // iterate over plain state and get newest value.
-                // Assumption we are okay to make is that plainstate represent
-                // `previous_stage_progress` state.
-                .map(|address| {
-                    plain_accounts.seek_exact(address).map(|a| (address, a.map(|(_, v)| v)))
-                })
-                .collect::<Result<Vec<_>, _>>()?
-                .into_iter()
-                .try_for_each(|(address, account)| -> Result<(), StageError> {
-                    let hashed_address = keccak256(address);
-                    if let Some(account) = account {
-                        hashed_accounts.upsert(hashed_address, account)?
-                    } else if hashed_accounts.seek_exact(hashed_address)?.is_some() {
-                        hashed_accounts.delete_current()?;
-                    }
-                    Ok(())
-                })?;
-        }
+        //     // Aggregate all transition changesets and and make list of account that have been
+        //     // changed.
+        //     tx.cursor_read::<tables::AccountChangeSet>()?
+        //         .walk_range(from_transition..to_transition)?
+        //         .collect::<Result<Vec<_>, _>>()?
+        //         .into_iter()
+        //         // fold all account to one set of changed accounts
+        //         .fold(BTreeSet::new(), |mut accounts: BTreeSet<Address>, (_, account_before)| {
+        //             accounts.insert(account_before.address);
+        //             accounts
+        //         })
+        //         .into_iter()
+        //         // iterate over plain state and get newest value.
+        //         // Assumption we are okay to make is that plainstate represent
+        //         // `previous_stage_progress` state.
+        //         .map(|address| {
+        //             plain_accounts.seek_exact(address).map(|a| (address, a.map(|(_, v)| v)))
+        //         })
+        //         .collect::<Result<Vec<_>, _>>()?
+        //         .into_iter()
+        //         .try_for_each(|(address, account)| -> Result<(), StageError> {
+        //             let hashed_address = keccak256(address);
+        //             if let Some(account) = account {
+        //                 hashed_accounts.upsert(hashed_address, account)?
+        //             } else if hashed_accounts.seek_exact(hashed_address)?.is_some() {
+        //                 hashed_accounts.delete_current()?;
+        //             }
+        //             Ok(())
+        //         })?;
+        // }
 
-        info!(target: "sync::stages::hashing_account", "Stage finished");
-        Ok(ExecOutput { stage_progress: input.previous_stage_progress(), done: true })
+        // info!(target: "sync::stages::hashing_account", "Stage finished");
+        // Ok(ExecOutput { stage_progress: input.previous_stage_progress(), done: true })
     }
 
     /// Unwind the stage.
@@ -267,7 +268,7 @@ mod tests {
             ) -> Result<(), TestRunnerError> {
                 for (addr, acc) in accounts.iter() {
                     self.tx.commit(|tx| {
-                        tx.put2::<tables::PlainAccountState>(*addr, *acc)?;
+                        tx.put::<tables::PlainAccountState>(*addr, *acc)?;
                         Ok(())
                     })?;
                 }
@@ -377,7 +378,7 @@ mod tests {
                             };
                             let acc_before_tx =
                                 AccountBeforeTx { address: *addr, info: Some(prev_acc) };
-                            tx.put2::<tables::AccountChangeSet>(t, acc_before_tx)?;
+                            tx.put::<tables::AccountChangeSet>(t, acc_before_tx)?;
                         }
 
                         Ok(())
