@@ -55,8 +55,9 @@ where
     }
 
     fn insert(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Self::Error> {
+        // TODO cursor
         // Caching and bulk inserting shouldn't be needed, as the data is ordered
-        self.tx.put::<tables::AccountsTrie>(H256::from_slice(key.as_slice()), value)?;
+        self.tx.put2::<tables::AccountsTrie>(H256::from_slice(key.as_slice()), value)?;
         Ok(())
     }
 
@@ -75,7 +76,7 @@ impl<'tx, 'itx, DB: Database> HashDatabase<'tx, 'itx, DB> {
     fn new(tx: &'tx Transaction<'itx, DB>) -> Result<Self, TrieError> {
         let root = EMPTY_ROOT;
         if tx.get::<tables::AccountsTrie>(root)?.is_none() {
-            tx.put::<tables::AccountsTrie>(root, [EMPTY_STRING_CODE].to_vec())?;
+            tx.put2::<tables::AccountsTrie>(root, [EMPTY_STRING_CODE].to_vec())?;
         }
         Ok(Self { tx })
     }
@@ -113,7 +114,7 @@ where
 
     fn insert(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Self::Error> {
         // Caching and bulk inserting shouldn't be needed, as the data is ordered
-        self.tx.put::<tables::StoragesTrie>(
+        self.tx.put2::<tables::StoragesTrie>(
             self.key,
             StorageTrieEntry { hash: H256::from_slice(key.as_slice()), node: value },
         )?;
@@ -140,7 +141,7 @@ impl<'tx, 'itx, DB: Database> DupHashDatabase<'tx, 'itx, DB> {
         let root = EMPTY_ROOT;
         let mut cursor = tx.cursor_dup_write::<tables::StoragesTrie>()?;
         if cursor.seek_by_key_subkey(key, root)?.is_none() {
-            tx.put::<tables::StoragesTrie>(
+            tx.put2::<tables::StoragesTrie>(
                 key,
                 StorageTrieEntry { hash: root, node: [EMPTY_STRING_CODE].to_vec() },
             )?;
@@ -393,7 +394,7 @@ mod tests {
         let tx = Transaction::new(db.as_ref()).unwrap();
         let address = Address::from_str("9fe4abd71ad081f091bd06dd1c16f7e92927561e").unwrap();
         let account = Account { nonce: 0, balance: U256::ZERO, bytecode_hash: None };
-        tx.put::<tables::HashedAccount>(keccak256(address), account).unwrap();
+        tx.put2::<tables::HashedAccount>(keccak256(address), account).unwrap();
         let mut encoded_account = Vec::new();
         EthAccount::from(account).encode(&mut encoded_account);
         let expected = H256(sec_trie_root::<KeccakHasher, _, _, _>([(address, encoded_account)]).0);
@@ -420,7 +421,7 @@ mod tests {
             ),
         ];
         for (address, account) in accounts {
-            tx.put::<tables::HashedAccount>(keccak256(address), account).unwrap();
+            tx.put2::<tables::HashedAccount>(keccak256(address), account).unwrap();
         }
         let encoded_accounts = accounts.iter().map(|(k, v)| {
             let mut out = Vec::new();
@@ -445,7 +446,7 @@ mod tests {
 
         let storage = Vec::from([(H256::from_low_u64_be(2), U256::from(1))]);
         for (k, v) in storage.clone() {
-            tx.put::<tables::HashedStorage>(
+            tx.put2::<tables::HashedStorage>(
                 hashed_address,
                 StorageEntry { key: keccak256(k), value: v },
             )
@@ -481,10 +482,10 @@ mod tests {
             balance: U256::from(414241124u32),
             bytecode_hash: Some(keccak256(code)),
         };
-        tx.put::<tables::HashedAccount>(hashed_address, account).unwrap();
+        tx.put2::<tables::HashedAccount>(hashed_address, account).unwrap();
 
         for (k, v) in storage.clone() {
-            tx.put::<tables::HashedStorage>(
+            tx.put2::<tables::HashedStorage>(
                 hashed_address,
                 StorageEntry { key: keccak256(k), value: v },
             )
@@ -519,7 +520,7 @@ mod tests {
 
         // Insert account state
         for (address, account) in &genesis.alloc {
-            tx.put::<tables::HashedAccount>(
+            tx.put2::<tables::HashedAccount>(
                 keccak256(address),
                 Account {
                     nonce: account.nonce.unwrap_or_default(),
@@ -557,16 +558,16 @@ mod tests {
             balance: U256::from(414241124u32),
             bytecode_hash: Some(keccak256(code)),
         };
-        tx.put::<tables::HashedAccount>(hashed_address, account).unwrap();
-        tx.put::<tables::AccountChangeSet>(31, AccountBeforeTx { address, info: None }).unwrap();
+        tx.put2::<tables::HashedAccount>(hashed_address, account).unwrap();
+        tx.put2::<tables::AccountChangeSet>(31, AccountBeforeTx { address, info: None }).unwrap();
 
         for (k, v) in storage {
-            tx.put::<tables::HashedStorage>(
+            tx.put2::<tables::HashedStorage>(
                 hashed_address,
                 StorageEntry { key: keccak256(k), value: v },
             )
             .unwrap();
-            tx.put::<tables::StorageChangeSet>(
+            tx.put2::<tables::StorageChangeSet>(
                 (32, address).into(),
                 StorageEntry { key: k, value: U256::ZERO },
             )
@@ -592,13 +593,13 @@ mod tests {
             .into_iter()
             .map(|(address, (account, storage))| {
                 let hashed_address = keccak256(address);
-                tx.put::<tables::HashedAccount>(hashed_address, account).unwrap();
+                tx.put2::<tables::HashedAccount>(hashed_address, account).unwrap();
                 // This is to mimic real data. Only contract accounts have storage.
                 let storage_root = if account.has_bytecode() {
                     let encoded_storage = storage.into_iter().map(|StorageEntry { key, value }| {
                         let hashed_key = keccak256(key);
                         let out = encode_fixed_size(&value).to_vec();
-                        tx.put::<tables::HashedStorage>(
+                        tx.put2::<tables::HashedStorage>(
                             hashed_address,
                             StorageEntry { key: hashed_key, value },
                         )

@@ -158,6 +158,7 @@ impl ExecutionStage {
         let mut current_transition_id = tx.get_block_transition(last_block)?;
         info!(target: "sync::stages::execution", current_transition_id, blocks = block_change_patches.len(), "Inserting execution results");
 
+        // TODO cursor
         // apply changes to plain database.
         for (results, block_number) in block_change_patches.into_iter() {
             let spurious_dragon_active =
@@ -211,7 +212,7 @@ impl ExecutionStage {
                         for (key, _, new_value) in storage {
                             // old values are already cleared.
                             if new_value != U256::ZERO {
-                                tx.put::<tables::PlainStorageState>(
+                                tx.put2::<tables::PlainStorageState>(
                                     address,
                                     StorageEntry { key, value: new_value },
                                 )?;
@@ -228,7 +229,7 @@ impl ExecutionStage {
                             // Always delete old value as duplicate table, put will not override it
                             tx.delete::<tables::PlainStorageState>(address, Some(old_entry))?;
                             if new_value != U256::ZERO {
-                                tx.put::<tables::PlainStorageState>(address, new_entry)?;
+                                tx.put2::<tables::PlainStorageState>(address, new_entry)?;
                             }
                         }
                     }
@@ -239,7 +240,7 @@ impl ExecutionStage {
                     // be packed). Currently save only raw bytes.
                     let bytecode = bytecode.bytes();
                     trace!(target: "sync::stages::execution", ?hash, ?bytecode, len = bytecode.len(), "Inserting bytecode");
-                    tx.put::<tables::Bytecodes>(hash, bytecode[..bytecode.len()].to_vec())?;
+                    tx.put2::<tables::Bytecodes>(hash, bytecode[..bytecode.len()].to_vec())?;
 
                     // NOTE: bytecode bytes are not inserted in change set and can be found in
                     // separate table
@@ -341,7 +342,7 @@ impl<DB: Database> Stage<DB> for ExecutionStage {
         // revert all changes to PlainState
         for (_, changeset) in account_changeset_batch.into_iter().rev() {
             if let Some(account_info) = changeset.info {
-                tx.put::<tables::PlainAccountState>(changeset.address, account_info)?;
+                tx.put2::<tables::PlainAccountState>(changeset.address, account_info)?;
             } else {
                 tx.delete::<tables::PlainAccountState>(changeset.address, None)?;
             }
@@ -437,18 +438,18 @@ mod tests {
         let balance = U256::from(0x3635c9adc5dea00000u128);
         let code_hash = keccak256(code);
         db_tx
-            .put::<tables::PlainAccountState>(
+            .put2::<tables::PlainAccountState>(
                 acc1,
                 Account { nonce: 0, balance: U256::ZERO, bytecode_hash: Some(code_hash) },
             )
             .unwrap();
         db_tx
-            .put::<tables::PlainAccountState>(
+            .put2::<tables::PlainAccountState>(
                 acc2,
                 Account { nonce: 0, balance, bytecode_hash: None },
             )
             .unwrap();
-        db_tx.put::<tables::Bytecodes>(code_hash, code.to_vec()).unwrap();
+        db_tx.put2::<tables::Bytecodes>(code_hash, code.to_vec()).unwrap();
         tx.commit().unwrap();
 
         // execute
@@ -533,9 +534,9 @@ mod tests {
         let acc2 = H160(hex!("a94f5374fce5edbc8e2a8697c15331677e6ebf0b"));
         let acc2_info = Account { nonce: 0, balance, bytecode_hash: None };
 
-        db_tx.put::<tables::PlainAccountState>(acc1, acc1_info).unwrap();
-        db_tx.put::<tables::PlainAccountState>(acc2, acc2_info).unwrap();
-        db_tx.put::<tables::Bytecodes>(code_hash, code.to_vec()).unwrap();
+        db_tx.put2::<tables::PlainAccountState>(acc1, acc1_info).unwrap();
+        db_tx.put2::<tables::PlainAccountState>(acc2, acc2_info).unwrap();
+        db_tx.put2::<tables::Bytecodes>(code_hash, code.to_vec()).unwrap();
         tx.commit().unwrap();
 
         // execute
@@ -607,18 +608,18 @@ mod tests {
             Account { nonce: 0, balance: U256::ZERO, bytecode_hash: Some(code_hash) };
 
         // set account
-        db_tx.put::<tables::PlainAccountState>(caller_address, caller_info).unwrap();
-        db_tx.put::<tables::PlainAccountState>(destroyed_address, destroyed_info).unwrap();
-        db_tx.put::<tables::Bytecodes>(code_hash, code.to_vec()).unwrap();
+        db_tx.put2::<tables::PlainAccountState>(caller_address, caller_info).unwrap();
+        db_tx.put2::<tables::PlainAccountState>(destroyed_address, destroyed_info).unwrap();
+        db_tx.put2::<tables::Bytecodes>(code_hash, code.to_vec()).unwrap();
         // set storage to check when account gets destroyed.
         db_tx
-            .put::<tables::PlainStorageState>(
+            .put2::<tables::PlainStorageState>(
                 destroyed_address,
                 StorageEntry { key: H256::zero(), value: U256::ZERO },
             )
             .unwrap();
         db_tx
-            .put::<tables::PlainStorageState>(
+            .put2::<tables::PlainStorageState>(
                 destroyed_address,
                 StorageEntry { key: H256::from_low_u64_be(1), value: U256::from(1u64) },
             )

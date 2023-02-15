@@ -82,9 +82,11 @@ impl<DB: Database> Stage<DB> for StorageHashingStage {
                     // next key of iterator
                     let next_key = storage.next()?;
 
+                    // TODO cursor
+
                     // iterate and put presorted hashed slots
                     hashed_batch.into_iter().try_for_each(|((addr, key), value)| {
-                        tx.put::<tables::HashedStorage>(addr, StorageEntry { key, value })
+                        tx.put2::<tables::HashedStorage>(addr, StorageEntry { key, value })
                     })?;
                     next_key.map(|(key, _)| key)
                 };
@@ -318,9 +320,9 @@ mod tests {
                     };
 
                     progress.body.iter().try_for_each(|transaction| {
-                        tx.put::<tables::TxHashNumber>(transaction.hash(), tx_id)?;
-                        tx.put::<tables::Transactions>(tx_id, transaction.clone())?;
-                        tx.put::<tables::TxTransitionIndex>(tx_id, transition_id)?;
+                        tx.put2::<tables::TxHashNumber>(transaction.hash(), tx_id)?;
+                        tx.put2::<tables::Transactions>(tx_id, transaction.clone())?;
+                        tx.put2::<tables::TxTransitionIndex>(tx_id, transition_id)?;
 
                         let (addr, _) = accounts
                             .get_mut(rand::random::<usize>() % n_accounts as usize)
@@ -356,8 +358,8 @@ mod tests {
                         transition_id += 1;
                     }
 
-                    tx.put::<tables::BlockTransitionIndex>(progress.number, transition_id)?;
-                    tx.put::<tables::BlockBodies>(progress.number, body)
+                    tx.put2::<tables::BlockTransitionIndex>(progress.number, transition_id)?;
+                    tx.put2::<tables::BlockBodies>(progress.number, body)
                 })?;
             }
 
@@ -437,7 +439,7 @@ mod tests {
                     }
                     _ => StorageEntry { key: entry.key, value: U256::from(0) },
                 };
-            tx.put::<tables::PlainStorageState>(tid_address.address(), entry)?;
+            tx.put2::<tables::PlainStorageState>(tid_address.address(), entry)?;
 
             if hash {
                 let hashed_address = keccak256(tid_address.address());
@@ -452,10 +454,10 @@ mod tests {
                         .expect("failed to delete entry");
                 }
 
-                tx.put::<tables::HashedStorage>(hashed_address, hashed_entry)?;
+                tx.put2::<tables::HashedStorage>(hashed_address, hashed_entry)?;
             }
 
-            tx.put::<tables::StorageChangeSet>(tid_address, prev_entry)?;
+            tx.put2::<tables::StorageChangeSet>(tid_address, prev_entry)?;
             Ok(())
         }
 

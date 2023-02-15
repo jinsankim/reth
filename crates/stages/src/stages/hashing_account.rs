@@ -46,6 +46,7 @@ impl<DB: Database> Stage<DB> for AccountHashingStage {
         tx: &mut Transaction<'_, DB>,
         input: ExecInput,
     ) -> Result<ExecOutput, StageError> {
+        // TODO cursor
         let stage_progress = input.stage_progress.unwrap_or_default();
         let previous_stage_progress = input.previous_stage_progress();
 
@@ -75,11 +76,12 @@ impl<DB: Database> Stage<DB> for AccountHashingStage {
 
                     // next key of iterator
                     let next_key = accounts.next()?;
+                    // TODO
 
                     // iterate and put presorted hashed accounts
                     hashed_batch
                         .into_iter()
-                        .try_for_each(|(k, v)| tx.put::<tables::HashedAccount>(k, v))?;
+                        .try_for_each(|(k, v)| tx.put2::<tables::HashedAccount>(k, v))?;
                     next_key
                 };
                 tx.commit()?;
@@ -265,7 +267,7 @@ mod tests {
             ) -> Result<(), TestRunnerError> {
                 for (addr, acc) in accounts.iter() {
                     self.tx.commit(|tx| {
-                        tx.put::<tables::PlainAccountState>(*addr, *acc)?;
+                        tx.put2::<tables::PlainAccountState>(*addr, *acc)?;
                         Ok(())
                     })?;
                 }
@@ -375,7 +377,7 @@ mod tests {
                             };
                             let acc_before_tx =
                                 AccountBeforeTx { address: *addr, info: Some(prev_acc) };
-                            tx.put::<tables::AccountChangeSet>(t, acc_before_tx)?;
+                            tx.put2::<tables::AccountChangeSet>(t, acc_before_tx)?;
                         }
 
                         Ok(())

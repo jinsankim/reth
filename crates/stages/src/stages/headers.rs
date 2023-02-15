@@ -136,6 +136,8 @@ where
         let mut cursor_header = tx.cursor_write::<tables::Headers>()?;
         let mut cursor_canonical = tx.cursor_write::<tables::CanonicalHeaders>()?;
 
+        // TODO cursor
+
         let mut latest = None;
         // Since the headers were returned in descending order,
         // iterate them in the reverse order
@@ -150,7 +152,7 @@ where
             latest = Some(header.number);
 
             // NOTE: HeaderNumbers are not sorted and can't be inserted with cursor.
-            tx.put::<tables::HeaderNumbers>(header_hash, header_number)?;
+            tx.put2::<tables::HeaderNumbers>(header_hash, header_number)?;
             cursor_header.insert(header_number, header)?;
             cursor_canonical.insert(header_number, header_hash)?;
         }
@@ -340,7 +342,7 @@ mod tests {
                 let head = random_header(start, None);
                 self.tx.insert_headers(std::iter::once(&head))?;
                 // patch td table for `update_head` call
-                self.tx.commit(|tx| tx.put::<tables::HeaderTD>(head.number, U256::ZERO.into()))?;
+                self.tx.commit(|tx| tx.put2::<tables::HeaderTD>(head.number, U256::ZERO.into()))?;
 
                 // use previous progress as seed size
                 let end = input.previous_stage.map(|(_, num)| num).unwrap_or_default() + 1;
@@ -504,9 +506,9 @@ mod tests {
         );
 
         // Checkpoint and no gap
-        tx.put::<tables::CanonicalHeaders>(head.number, head.hash())
+        tx.put2::<tables::CanonicalHeaders>(head.number, head.hash())
             .expect("failed to write canonical");
-        tx.put::<tables::Headers>(head.number, head.clone().unseal())
+        tx.put2::<tables::Headers>(head.number, head.clone().unseal())
             .expect("failed to write header");
 
         let gap = stage.get_sync_gap(&tx, stage_progress).await.unwrap();
@@ -514,9 +516,9 @@ mod tests {
         assert_eq!(gap.target.tip(), consensus_tip);
 
         // Checkpoint and gap
-        tx.put::<tables::CanonicalHeaders>(gap_tip.number, gap_tip.hash())
+        tx.put2::<tables::CanonicalHeaders>(gap_tip.number, gap_tip.hash())
             .expect("failed to write canonical");
-        tx.put::<tables::Headers>(gap_tip.number, gap_tip.clone().unseal())
+        tx.put2::<tables::Headers>(gap_tip.number, gap_tip.clone().unseal())
             .expect("failed to write header");
 
         let gap = stage.get_sync_gap(&tx, stage_progress).await.unwrap();
@@ -524,9 +526,9 @@ mod tests {
         assert_eq!(gap.target.tip(), gap_tip.parent_hash);
 
         // Checkpoint and gap closed
-        tx.put::<tables::CanonicalHeaders>(gap_fill.number, gap_fill.hash())
+        tx.put2::<tables::CanonicalHeaders>(gap_fill.number, gap_fill.hash())
             .expect("failed to write canonical");
-        tx.put::<tables::Headers>(gap_fill.number, gap_fill.clone().unseal())
+        tx.put2::<tables::Headers>(gap_fill.number, gap_fill.clone().unseal())
             .expect("failed to write header");
 
         assert_matches!(

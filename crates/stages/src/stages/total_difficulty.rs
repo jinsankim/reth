@@ -13,6 +13,8 @@ use reth_primitives::{ChainSpec, Hardfork, EMPTY_OMMER_ROOT, MAINNET, U256};
 use reth_provider::Transaction;
 use tracing::*;
 
+// TODO cursor
+
 /// The [`StageId`] of the total difficulty stage.
 pub const TOTAL_DIFFICULTY: StageId = StageId("TotalDifficulty");
 
@@ -212,7 +214,7 @@ mod tests {
                     .map(|(_, v)| v)
                     .unwrap_or_default()
                     .into();
-                tx.put::<tables::HeaderTD>(head.number, (td + head.difficulty).into())
+                tx.put2::<tables::HeaderTD>(head.number, (td + head.difficulty).into())
             })?;
 
             // use previous progress as seed size

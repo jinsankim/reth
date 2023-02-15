@@ -36,7 +36,8 @@ impl StageId {
         tx: &impl DbTxMut<'db>,
         block: BlockNumber,
     ) -> Result<(), DbError> {
-        tx.put::<SyncStage>(self.0.as_bytes().to_vec(), block)
+        // TODO cursor
+        tx.put2::<SyncStage>(self.0.as_bytes().to_vec(), block)
     }
 }
 

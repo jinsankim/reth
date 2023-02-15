@@ -80,6 +80,7 @@ impl<DB: Database> Stage<DB> for MerkleStage {
         tx: &mut Transaction<'_, DB>,
         input: ExecInput,
     ) -> Result<ExecOutput, StageError> {
+        // TODO cursor
         let threshold = match self {
             MerkleStage::Unwind => {
                 info!(target: "sync::stages::merkle::unwind", "Stage is always skipped");
@@ -304,9 +305,9 @@ mod tests {
                     };
 
                     progress.body.iter().try_for_each(|transaction| {
-                        tx.put::<tables::TxHashNumber>(transaction.hash(), tx_id)?;
-                        tx.put::<tables::Transactions>(tx_id, transaction.clone())?;
-                        tx.put::<tables::TxTransitionIndex>(tx_id, transition_id)?;
+                        tx.put2::<tables::TxHashNumber>(transaction.hash(), tx_id)?;
+                        tx.put2::<tables::Transactions>(tx_id, transaction.clone())?;
+                        tx.put2::<tables::TxTransitionIndex>(tx_id, transition_id)?;
 
                         // seed account changeset
                         let (addr, prev_acc) = accounts
@@ -315,7 +316,7 @@ mod tests {
                         let acc_before_tx =
                             AccountBeforeTx { address: *addr, info: Some(*prev_acc) };
 
-                        tx.put::<tables::AccountChangeSet>(transition_id, acc_before_tx)?;
+                        tx.put2::<tables::AccountChangeSet>(transition_id, acc_before_tx)?;
 
                         prev_acc.nonce += 1;
                         prev_acc.balance = prev_acc.balance.wrapping_add(U256::from(1));
@@ -327,7 +328,7 @@ mod tests {
                         let storage = storages.entry(*addr).or_default();
                         let old_value = storage.entry(new_entry.key).or_default();
 
-                        tx.put::<tables::StorageChangeSet>(
+                        tx.put2::<tables::StorageChangeSet>(
                             (transition_id, *addr).into(),
                             StorageEntry { key: new_entry.key, value: *old_value },
                         )?;
@@ -340,8 +341,8 @@ mod tests {
                         Ok(())
                     })?;
 
-                    tx.put::<tables::BlockTransitionIndex>(progress.number, transition_id)?;
-                    tx.put::<tables::BlockBodies>(progress.number, body)
+                    tx.put2::<tables::BlockTransitionIndex>(progress.number, transition_id)?;
+                    tx.put2::<tables::BlockBodies>(progress.number, body)
                 })?;
             }
 
@@ -353,7 +354,7 @@ mod tests {
             self.tx.commit(|tx| {
                 let mut last_header = tx.get::<tables::Headers>(last_block_number)?.unwrap();
                 last_header.state_root = root;
-                tx.put::<tables::Headers>(last_block_number, last_header)
+                tx.put2::<tables::Headers>(last_block_number, last_header)
             })?;
 
             Ok(blocks)
@@ -431,9 +432,12 @@ mod tests {
 
                         match account_before_tx.info {
                             Some(acc) => {
-                                tx.put::<tables::PlainAccountState>(account_before_tx.address, acc)
-                                    .unwrap();
-                                tx.put::<tables::HashedAccount>(
+                                tx.put2::<tables::PlainAccountState>(
+                                    account_before_tx.address,
+                                    acc,
+                                )
+                                .unwrap();
+                                tx.put2::<tables::HashedAccount>(
                                     keccak256(account_before_tx.address),
                                     acc,
                                 )
@@ -491,8 +495,8 @@ mod tests {
         ) -> Result<(), TestRunnerError> {
             for (addr, acc) in accounts.iter() {
                 self.tx.commit(|tx| {
-                    tx.put::<tables::PlainAccountState>(*addr, *acc)?;
-                    tx.put::<tables::HashedAccount>(keccak256(addr), *acc)?;
+                    tx.put2::<tables::PlainAccountState>(*addr, *acc)?;
+                    tx.put2::<tables::HashedAccount>(keccak256(addr), *acc)?;
                     Ok(())
                 })?;
             }
@@ -509,7 +513,7 @@ mod tests {
                     storages.iter().try_for_each(|(&addr, storage)| {
                         storage.iter().try_for_each(|(&key, &value)| {
                             let entry = StorageEntry { key, value };
-                            tx.put::<tables::PlainStorageState>(addr, entry)
+                            tx.put2::<tables::PlainStorageState>(addr, entry)
                         })
                     })?;
                     storages
@@ -528,7 +532,7 @@ mod tests {
                         .try_for_each(|(addr, storage)| {
                             storage.into_iter().try_for_each(|(key, &value)| {
                                 let entry = StorageEntry { key, value };
-                                tx.put::<tables::HashedStorage>(addr, entry)
+                                tx.put2::<tables::HashedStorage>(addr, entry)
                             })
                         })?;
                     Ok(())

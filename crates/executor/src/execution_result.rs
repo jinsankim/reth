@@ -63,15 +63,16 @@ impl AccountInfoChangeSet {
         tx_index: u64,
         has_state_clear_eip: bool,
     ) -> Result<(), DbError> {
+        // TODO cursor
         match self {
             AccountInfoChangeSet::Changed { old, new } => {
                 // insert old account in AccountChangeSet
                 // check for old != new was already done
-                tx.put::<tables::AccountChangeSet>(
+                tx.put2::<tables::AccountChangeSet>(
                     tx_index,
                     AccountBeforeTx { address, info: Some(old) },
                 )?;
-                tx.put::<tables::PlainAccountState>(address, new)?;
+                tx.put2::<tables::PlainAccountState>(address, new)?;
             }
             AccountInfoChangeSet::Created { new } => {
                 // Ignore account that are created empty and state clear (SpuriousDragon) hardfork
@@ -79,15 +80,15 @@ impl AccountInfoChangeSet {
                 if has_state_clear_eip && new.is_empty() {
                     return Ok(())
                 }
-                tx.put::<tables::AccountChangeSet>(
+                tx.put2::<tables::AccountChangeSet>(
                     tx_index,
                     AccountBeforeTx { address, info: None },
                 )?;
-                tx.put::<tables::PlainAccountState>(address, new)?;
+                tx.put2::<tables::PlainAccountState>(address, new)?;
             }
             AccountInfoChangeSet::Destroyed { old } => {
                 tx.delete::<tables::PlainAccountState>(address, None)?;
-                tx.put::<tables::AccountChangeSet>(
+                tx.put2::<tables::AccountChangeSet>(
                     tx_index,
                     AccountBeforeTx { address, info: Some(old) },
                 )?;

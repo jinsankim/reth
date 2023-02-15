@@ -46,6 +46,8 @@ impl<DB: Database> Stage<DB> for IndexAccountHistoryStage {
         tx: &mut Transaction<'_, DB>,
         input: ExecInput,
     ) -> Result<ExecOutput, StageError> {
+        // TODO cursor
+
         let stage_progress = input.stage_progress.unwrap_or_default();
         let previous_stage_progress = input.previous_stage_progress();
 
@@ -87,7 +89,7 @@ impl<DB: Database> Stage<DB> for IndexAccountHistoryStage {
             let last_chunk = chunks.pop();
 
             chunks.into_iter().try_for_each(|list| {
-                tx.put::<tables::AccountHistory>(
+                tx.put2::<tables::AccountHistory>(
                     ShardedKey::new(
                         address,
                         *list.last().expect("Chuck does not return empty list") as TransitionId,
@@ -97,7 +99,7 @@ impl<DB: Database> Stage<DB> for IndexAccountHistoryStage {
             })?;
             // Insert last list with u64::MAX
             if let Some(last_list) = last_chunk {
-                tx.put::<tables::AccountHistory>(
+                tx.put2::<tables::AccountHistory>(
                     ShardedKey::new(address, u64::MAX),
                     TransitionList::new(last_list).expect("Indices are presorted and not empty"),
                 )?
@@ -143,7 +145,7 @@ impl<DB: Database> Stage<DB> for IndexAccountHistoryStage {
             // check last shard_part, if present, items needs to be reinserted.
             if !shard_part.is_empty() {
                 // there are items in list
-                tx.put::<tables::AccountHistory>(
+                tx.put2::<tables::AccountHistory>(
                     ShardedKey::new(address, u64::MAX),
                     TransitionList::new(shard_part)
                         .expect("There is at least one element in list and it is sorted."),
@@ -246,12 +248,12 @@ mod tests {
         // setup
         tx.commit(|tx| {
             // we just need first and last
-            tx.put::<tables::BlockTransitionIndex>(0, 3).unwrap();
-            tx.put::<tables::BlockTransitionIndex>(5, 7).unwrap();
+            tx.put2::<tables::BlockTransitionIndex>(0, 3).unwrap();
+            tx.put2::<tables::BlockTransitionIndex>(5, 7).unwrap();
 
             // setup changeset that are going to be applied to history index
-            tx.put::<tables::AccountChangeSet>(4, acc()).unwrap();
-            tx.put::<tables::AccountChangeSet>(6, acc()).unwrap();
+            tx.put2::<tables::AccountChangeSet>(4, acc()).unwrap();
+            tx.put2::<tables::AccountChangeSet>(6, acc()).unwrap();
             Ok(())
         })
         .unwrap()
@@ -309,7 +311,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put::<tables::AccountHistory>(shard(u64::MAX), list(&[1, 2, 3])).unwrap();
+            tx.put2::<tables::AccountHistory>(shard(u64::MAX), list(&[1, 2, 3])).unwrap();
             Ok(())
         })
         .unwrap();
@@ -338,7 +340,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put::<tables::AccountHistory>(shard(u64::MAX), list(&full_list)).unwrap();
+            tx.put2::<tables::AccountHistory>(shard(u64::MAX), list(&full_list)).unwrap();
             Ok(())
         })
         .unwrap();
@@ -370,7 +372,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put::<tables::AccountHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
+            tx.put2::<tables::AccountHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
             Ok(())
         })
         .unwrap();
@@ -405,7 +407,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put::<tables::AccountHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
+            tx.put2::<tables::AccountHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
             Ok(())
         })
         .unwrap();
@@ -439,9 +441,9 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put::<tables::AccountHistory>(shard(1), list(&full_list)).unwrap();
-            tx.put::<tables::AccountHistory>(shard(2), list(&full_list)).unwrap();
-            tx.put::<tables::AccountHistory>(shard(u64::MAX), list(&[2, 3])).unwrap();
+            tx.put2::<tables::AccountHistory>(shard(1), list(&full_list)).unwrap();
+            tx.put2::<tables::AccountHistory>(shard(2), list(&full_list)).unwrap();
+            tx.put2::<tables::AccountHistory>(shard(u64::MAX), list(&[2, 3])).unwrap();
             Ok(())
         })
         .unwrap();

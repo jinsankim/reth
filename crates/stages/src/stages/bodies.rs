@@ -70,6 +70,7 @@ impl<DB: Database, D: BodyDownloader> Stage<DB> for BodyStage<D> {
     fn id(&self) -> StageId {
         BODIES
     }
+    // TODO cursor
 
     /// Download block bodies from the last checkpoint for this stage up until the latest synced
     /// header, limited by the stage's batch size.
@@ -526,20 +527,20 @@ mod tests {
                         };
                         body.tx_id_range().try_for_each(|tx_id| {
                             let transaction = random_signed_tx();
-                            tx.put::<tables::Transactions>(tx_id, transaction)?;
-                            tx.put::<tables::TxTransitionIndex>(tx_id, tx_id)
+                            tx.put2::<tables::Transactions>(tx_id, transaction)?;
+                            tx.put2::<tables::TxTransitionIndex>(tx_id, tx_id)
                         })?;
 
                         let last_transition_id = progress.body.len() as u64;
                         let block_transition_id = last_transition_id + 1; // for block reward
 
-                        tx.put::<tables::BlockTransitionIndex>(
+                        tx.put2::<tables::BlockTransitionIndex>(
                             progress.number,
                             block_transition_id,
                         )?;
-                        tx.put::<tables::BlockBodies>(progress.number, body)?;
+                        tx.put2::<tables::BlockBodies>(progress.number, body)?;
                         if !progress.ommers_hash_is_empty() {
-                            tx.put::<tables::BlockOmmers>(
+                            tx.put2::<tables::BlockOmmers>(
                                 progress.number,
                                 StoredBlockOmmers {
                                     ommers: progress

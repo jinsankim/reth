@@ -77,6 +77,8 @@ impl<DB: Database> Stage<DB> for IndexStorageHistoryStage {
             },
         );
 
+        // TODO cursor
+
         for ((address, storage_key), mut indices) in storage_changeset_lists {
             let mut last_shard = take_last_storage_shard(tx, address, storage_key)?;
             last_shard.append(&mut indices);
@@ -92,7 +94,7 @@ impl<DB: Database> Stage<DB> for IndexStorageHistoryStage {
 
             // chunk indices and insert them in shards of N size.
             chunks.into_iter().try_for_each(|list| {
-                tx.put::<tables::StorageHistory>(
+                tx.put2::<tables::StorageHistory>(
                     StorageShardedKey::new(
                         address,
                         storage_key,
@@ -103,7 +105,7 @@ impl<DB: Database> Stage<DB> for IndexStorageHistoryStage {
             })?;
             // Insert last list with u64::MAX
             if let Some(last_list) = last_chunk {
-                tx.put::<tables::StorageHistory>(
+                tx.put2::<tables::StorageHistory>(
                     StorageShardedKey::new(address, storage_key, u64::MAX),
                     TransitionList::new(last_list).expect("Indices are presorted and not empty"),
                 )?;
@@ -153,7 +155,7 @@ impl<DB: Database> Stage<DB> for IndexStorageHistoryStage {
             // check last shard_part, if present, items needs to be reinserted.
             if !shard_part.is_empty() {
                 // there are items in list
-                tx.put::<tables::StorageHistory>(
+                tx.put2::<tables::StorageHistory>(
                     StorageShardedKey::new(address, storage_key, u64::MAX),
                     TransitionList::new(shard_part)
                         .expect("There is at least one element in list and it is sorted."),
@@ -270,12 +272,12 @@ mod tests {
         // setup
         tx.commit(|tx| {
             // we just need first and last
-            tx.put::<tables::BlockTransitionIndex>(0, 3).unwrap();
-            tx.put::<tables::BlockTransitionIndex>(5, 7).unwrap();
+            tx.put2::<tables::BlockTransitionIndex>(0, 3).unwrap();
+            tx.put2::<tables::BlockTransitionIndex>(5, 7).unwrap();
 
             // setup changeset that are going to be applied to history index
-            tx.put::<tables::StorageChangeSet>(trns(4), storage(STORAGE_KEY)).unwrap();
-            tx.put::<tables::StorageChangeSet>(trns(6), storage(STORAGE_KEY)).unwrap();
+            tx.put2::<tables::StorageChangeSet>(trns(4), storage(STORAGE_KEY)).unwrap();
+            tx.put2::<tables::StorageChangeSet>(trns(6), storage(STORAGE_KEY)).unwrap();
             Ok(())
         })
         .unwrap()
@@ -333,7 +335,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put::<tables::StorageHistory>(shard(u64::MAX), list(&[1, 2, 3])).unwrap();
+            tx.put2::<tables::StorageHistory>(shard(u64::MAX), list(&[1, 2, 3])).unwrap();
             Ok(())
         })
         .unwrap();
@@ -366,7 +368,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put::<tables::StorageHistory>(shard(u64::MAX), list(&full_list)).unwrap();
+            tx.put2::<tables::StorageHistory>(shard(u64::MAX), list(&full_list)).unwrap();
             Ok(())
         })
         .unwrap();
@@ -398,7 +400,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put::<tables::StorageHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
+            tx.put2::<tables::StorageHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
             Ok(())
         })
         .unwrap();
@@ -433,7 +435,7 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put::<tables::StorageHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
+            tx.put2::<tables::StorageHistory>(shard(u64::MAX), list(&close_full_list)).unwrap();
             Ok(())
         })
         .unwrap();
@@ -467,9 +469,9 @@ mod tests {
         // setup
         partial_setup(&tx);
         tx.commit(|tx| {
-            tx.put::<tables::StorageHistory>(shard(1), list(&full_list)).unwrap();
-            tx.put::<tables::StorageHistory>(shard(2), list(&full_list)).unwrap();
-            tx.put::<tables::StorageHistory>(shard(u64::MAX), list(&[2, 3])).unwrap();
+            tx.put2::<tables::StorageHistory>(shard(1), list(&full_list)).unwrap();
+            tx.put2::<tables::StorageHistory>(shard(2), list(&full_list)).unwrap();
+            tx.put2::<tables::StorageHistory>(shard(u64::MAX), list(&[2, 3])).unwrap();
             Ok(())
         })
         .unwrap();

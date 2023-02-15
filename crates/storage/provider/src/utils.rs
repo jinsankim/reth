@@ -19,11 +19,12 @@ pub fn insert_block<'a, TX: DbTxMut<'a> + DbTx<'a>>(
     has_block_reward: bool,
     parent_tx_num_transition_id: Option<(u64, u64)>,
 ) -> Result<()> {
-    tx.put::<tables::CanonicalHeaders>(block.number, block.hash())?;
+    // TODO cursor
+    tx.put2::<tables::CanonicalHeaders>(block.number, block.hash())?;
     // Put header with canonical hashes.
-    tx.put::<tables::Headers>(block.number, block.header.as_ref().clone())?;
-    tx.put::<tables::HeaderNumbers>(block.hash(), block.number)?;
-    tx.put::<tables::HeaderTD>(
+    tx.put2::<tables::Headers>(block.number, block.header.as_ref().clone())?;
+    tx.put2::<tables::HeaderNumbers>(block.hash(), block.number)?;
+    tx.put2::<tables::HeaderTD>(
         block.number,
         if has_block_reward {
             U256::ZERO
@@ -35,7 +36,7 @@ pub fn insert_block<'a, TX: DbTxMut<'a> + DbTx<'a>>(
 
     // insert body ommers data
     if !block.ommers.is_empty() {
-        tx.put::<tables::BlockOmmers>(
+        tx.put2::<tables::BlockOmmers>(
             block.number,
             StoredBlockOmmers { ommers: block.ommers.iter().map(|h| h.as_ref().clone()).collect() },
         )?;
@@ -58,16 +59,16 @@ pub fn insert_block<'a, TX: DbTxMut<'a> + DbTx<'a>>(
         };
 
     // insert body data
-    tx.put::<tables::BlockBodies>(
+    tx.put2::<tables::BlockBodies>(
         block.number,
         StoredBlockBody { start_tx_id: current_tx_id, tx_count: block.body.len() as u64 },
     )?;
 
     for transaction in block.body.iter() {
         let rec_tx = transaction.clone().into_ecrecovered().unwrap();
-        tx.put::<tables::TxSenders>(current_tx_id, rec_tx.signer())?;
-        tx.put::<tables::Transactions>(current_tx_id, rec_tx.into())?;
-        tx.put::<tables::TxTransitionIndex>(current_tx_id, transition_id)?;
+        tx.put2::<tables::TxSenders>(current_tx_id, rec_tx.signer())?;
+        tx.put2::<tables::Transactions>(current_tx_id, rec_tx.into())?;
+        tx.put2::<tables::TxTransitionIndex>(current_tx_id, transition_id)?;
         transition_id += 1;
         current_tx_id += 1;
     }
@@ -75,7 +76,7 @@ pub fn insert_block<'a, TX: DbTxMut<'a> + DbTx<'a>>(
     if has_block_reward {
         transition_id += 1;
     }
-    tx.put::<tables::BlockTransitionIndex>(block.number, transition_id)?;
+    tx.put2::<tables::BlockTransitionIndex>(block.number, transition_id)?;
 
     Ok(())
 }
