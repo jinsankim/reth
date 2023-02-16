@@ -1,8 +1,8 @@
 use crate::{
     errors::{EthHandshakeError, EthStreamError},
-    message::{EthBroadcastMessage, ProtocolBroadcastMessage},
+    message::{EthBroadcastMessage, EthStatusMessage, ProtocolBroadcastMessage},
     types::{EthMessage, ProtocolMessage, Status},
-    EthVersion,
+    Eth66Message, Eth67Message, Eth68Message, EthVersion,
 };
 use bytes::{Bytes, BytesMut};
 use futures::{ready, Sink, SinkExt, StreamExt};
@@ -10,6 +10,7 @@ use pin_project::pin_project;
 use reth_primitives::ForkFilter;
 use reth_rlp::Encodable;
 use std::{
+    marker::PhantomData,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -44,6 +45,8 @@ where
     S: Stream<Item = Result<BytesMut, E>> + Sink<Bytes, Error = E> + Unpin,
     EthStreamError: From<E>,
 {
+    type T = EthMessage;
+
     /// Consumes the [`UnauthedEthStream`] and returns an [`EthStream`] after the `Status`
     /// handshake is completed successfully. This also returns the `Status` message sent by the
     /// remote peer.
@@ -51,7 +54,7 @@ where
         mut self,
         status: Status,
         fork_filter: ForkFilter,
-    ) -> Result<(EthStream<S>, Status), EthStreamError> {
+    ) -> Result<(EthStream<T, S>, Status), EthStreamError> {
         tracing::trace!(
             %status,
             "sending eth status to peer"
@@ -60,7 +63,7 @@ where
         // we need to encode and decode here on our own because we don't have an `EthStream` yet
         // The max length for a status with TTD is: <msg id = 1 byte> + <rlp(status) = 88 byte>
         let mut our_status_bytes = BytesMut::with_capacity(1 + 88);
-        ProtocolMessage::from(EthMessage::Status(status)).encode(&mut our_status_bytes);
+        ProtocolMessage::from(EthStatusMessage::Status(status)).encode(&mut our_status_bytes);
         let our_status_bytes = our_status_bytes.freeze();
         self.inner.send(our_status_bytes).await?;
 
@@ -76,7 +79,7 @@ where
         }
 
         let version = EthVersion::try_from(status.version)?;
-        let msg = match ProtocolMessage::decode_message(version, &mut their_msg.as_ref()) {
+        let msg = match ProtocolMessage::decode(&mut their_msg.as_ref()) {
             Ok(m) => m,
             Err(err) => {
                 tracing::debug!("rlp decode error in eth handshake: msg={their_msg:x}");
@@ -87,7 +90,7 @@ where
         // TODO: Add any missing checks
         // https://github.com/ethereum/go-ethereum/blob/9244d5cd61f3ea5a7645fdf2a1a96d53421e412f/eth/protocols/eth/handshake.go#L87-L89
         match msg.message {
-            EthMessage::Status(resp) => {
+            EthStatusMessage::Status(resp) => {
                 tracing::trace!(
                     status=%resp,
                     "validating incoming eth status from peer"
@@ -120,13 +123,19 @@ where
 
                 // now we can create the `EthStream` because the peer has successfully completed
                 // the handshake
-                let stream = EthStream::new(version, self.inner);
-
-                Ok((stream, resp))
+                // TODO
+                 match status.version {
+                    66 => return Ok((EthStream::<Eth66Message, S>::new(self.inner), resp)),
+                    67 => return Ok((EthStream::<Eth67Message, S>::new(self.inner), resp)),
+                    68 => return Ok((EthStream::<Eth68Message, S>::new(self.inner), resp)),
+                    // TODO
+                    _ => panic!()
+                };
             }
-            _ => Err(EthStreamError::EthHandshakeError(
-                EthHandshakeError::NonStatusMessageInHandshake,
-            )),
+            // TODO
+            // _ => Err(EthStreamError::EthHandshakeError(
+            //     EthHandshakeError::NonStatusMessageInHandshake,
+            // )),
         }
     }
 }
@@ -135,17 +144,20 @@ where
 /// compatible with eth-networking protocol messages, which get RLP encoded/decoded.
 #[pin_project]
 #[derive(Debug)]
-pub struct EthStream<S> {
-    version: EthVersion,
+pub struct EthStream<T, S>
+where
+    T: EthMessage,
+{
     #[pin]
     inner: S,
+    _phantom: PhantomData<T>,
 }
 
-impl<S> EthStream<S> {
+impl<T: EthMessage, S> EthStream<T, S> {
     /// Creates a new unauthed [`EthStream`] from a provided stream. You will need
     /// to manually handshake a peer.
-    pub fn new(version: EthVersion, inner: S) -> Self {
-        Self { version, inner }
+    pub fn new(inner: S) -> Self {
+        Self { inner, _phantom: std::marker::PhantomData }
     }
 
     /// Returns the underlying stream.
@@ -164,8 +176,9 @@ impl<S> EthStream<S> {
     }
 }
 
-impl<S, E> EthStream<S>
+impl<T, S, E> EthStream<T, S>
 where
+    T: EthMessage,
     S: Sink<Bytes, Error = E> + Unpin,
     EthStreamError: From<E>,
 {
@@ -184,12 +197,13 @@ where
     }
 }
 
-impl<S, E> Stream for EthStream<S>
+impl<T, S, E> Stream for EthStream<T, S>
 where
+    T: EthMessage,
     S: Stream<Item = Result<BytesMut, E>> + Unpin,
     EthStreamError: From<E>,
 {
-    type Item = Result<EthMessage, EthStreamError>;
+    type Item = Result<T, EthStreamError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
@@ -204,7 +218,7 @@ where
             return Poll::Ready(Some(Err(EthStreamError::MessageTooBig(bytes.len()))))
         }
 
-        let msg = match ProtocolMessage::decode_message(*this.version, &mut bytes.as_ref()) {
+        let msg = match ProtocolMessage::<T>::decode(&mut bytes.as_ref()) {
             Ok(m) => m,
             Err(err) => {
                 tracing::debug!("rlp decode error: msg={bytes:x}");
@@ -212,18 +226,20 @@ where
             }
         };
 
-        if matches!(msg.message, EthMessage::Status(_)) {
-            return Poll::Ready(Some(Err(EthStreamError::EthHandshakeError(
-                EthHandshakeError::StatusNotInHandshake,
-            ))))
-        }
+        // TODO
+        // if matches!(msg.message, EthMessage::Status(_)) {
+        //     return Poll::Ready(Some(Err(EthStreamError::EthHandshakeError(
+        //         EthHandshakeError::StatusNotInHandshake,
+        //     ))))
+        // }
 
         Poll::Ready(Some(Ok(msg.message)))
     }
 }
 
-impl<S, E> Sink<EthMessage> for EthStream<S>
+impl<T, S, E> Sink<T> for EthStream<T, S>
 where
+    T: EthMessage,
     S: Sink<Bytes, Error = E> + Unpin,
     EthStreamError: From<E>,
 {
@@ -233,7 +249,7 @@ where
         self.project().inner.poll_ready(cx).map_err(Into::into)
     }
 
-    fn start_send(self: Pin<&mut Self>, item: EthMessage) -> Result<(), Self::Error> {
+    fn start_send(self: Pin<&mut Self>, item: Box<dyn EthMessage>) -> Result<(), Self::Error> {
         if matches!(item, EthMessage::Status(_)) {
             return Err(EthStreamError::EthHandshakeError(EthHandshakeError::StatusNotInHandshake))
         }

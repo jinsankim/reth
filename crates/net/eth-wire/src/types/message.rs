@@ -1,10 +1,6 @@
 #![allow(missing_docs)]
-use super::{
-    broadcast::NewBlockHashes, BlockBodies, BlockHeaders, GetBlockBodies, GetBlockHeaders,
-    GetNodeData, GetPooledTransactions, GetReceipts, NewBlock, NewPooledTransactionHashes,
-    NewPooledTransactionHashes68, NodeData, PooledTransactions, Receipts, Status, Transactions,
-};
-use crate::{EthVersion, SharedTransactions};
+use super::NewBlock;
+use crate::{SharedTransactions, Status};
 use bytes::{Buf, BufMut};
 use reth_rlp::{length_of_length, Decodable, Encodable, Header};
 use std::{fmt::Debug, sync::Arc};
@@ -15,89 +11,23 @@ use serde::{Deserialize, Serialize};
 /// An `eth` protocol message, containing a message ID and payload.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct ProtocolMessage {
+pub struct ProtocolMessage<T: EthMessage> {
     pub message_type: EthMessageID,
-    pub message: EthMessage,
+    pub message: T,
 }
 
-impl ProtocolMessage {
+impl<T: EthMessage> ProtocolMessage<T> {
     /// Create a new ProtocolMessage from a message type and message rlp bytes.
-    pub fn decode_message(
-        version: EthVersion,
-        buf: &mut &[u8],
-    ) -> Result<Self, reth_rlp::DecodeError> {
+    pub fn decode(buf: &mut &[u8]) -> Result<Self, reth_rlp::DecodeError> {
         let message_type = EthMessageID::decode(buf)?;
-
-        let message = match message_type {
-            EthMessageID::Status => EthMessage::Status(Status::decode(buf)?),
-            EthMessageID::NewBlockHashes => {
-                EthMessage::NewBlockHashes(NewBlockHashes::decode(buf)?)
-            }
-            EthMessageID::NewBlock => EthMessage::NewBlock(Box::new(NewBlock::decode(buf)?)),
-            EthMessageID::Transactions => EthMessage::Transactions(Transactions::decode(buf)?),
-            EthMessageID::NewPooledTransactionHashes => {
-                if version >= EthVersion::Eth68 {
-                    EthMessage::NewPooledTransactionHashes68(NewPooledTransactionHashes68::decode(
-                        buf,
-                    )?)
-                } else {
-                    EthMessage::NewPooledTransactionHashes(NewPooledTransactionHashes::decode(buf)?)
-                }
-            }
-            EthMessageID::GetBlockHeaders => {
-                let request_pair = RequestPair::<GetBlockHeaders>::decode(buf)?;
-                EthMessage::GetBlockHeaders(request_pair)
-            }
-            EthMessageID::BlockHeaders => {
-                let request_pair = RequestPair::<BlockHeaders>::decode(buf)?;
-                EthMessage::BlockHeaders(request_pair)
-            }
-            EthMessageID::GetBlockBodies => {
-                let request_pair = RequestPair::<GetBlockBodies>::decode(buf)?;
-                EthMessage::GetBlockBodies(request_pair)
-            }
-            EthMessageID::BlockBodies => {
-                let request_pair = RequestPair::<BlockBodies>::decode(buf)?;
-                EthMessage::BlockBodies(request_pair)
-            }
-            EthMessageID::GetPooledTransactions => {
-                let request_pair = RequestPair::<GetPooledTransactions>::decode(buf)?;
-                EthMessage::GetPooledTransactions(request_pair)
-            }
-            EthMessageID::PooledTransactions => {
-                let request_pair = RequestPair::<PooledTransactions>::decode(buf)?;
-                EthMessage::PooledTransactions(request_pair)
-            }
-            EthMessageID::GetNodeData => {
-                if version >= EthVersion::Eth67 {
-                    return Err(reth_rlp::DecodeError::Custom("invalid message id"))
-                }
-                let request_pair = RequestPair::<GetNodeData>::decode(buf)?;
-                EthMessage::GetNodeData(request_pair)
-            }
-            EthMessageID::NodeData => {
-                if version >= EthVersion::Eth67 {
-                    return Err(reth_rlp::DecodeError::Custom("invalid message id"))
-                }
-                let request_pair = RequestPair::<NodeData>::decode(buf)?;
-                EthMessage::NodeData(request_pair)
-            }
-            EthMessageID::GetReceipts => {
-                let request_pair = RequestPair::<GetReceipts>::decode(buf)?;
-                EthMessage::GetReceipts(request_pair)
-            }
-            EthMessageID::Receipts => {
-                let request_pair = RequestPair::<Receipts>::decode(buf)?;
-                EthMessage::Receipts(request_pair)
-            }
-        };
+        let message = T::decode(message_type, buf)?;
         Ok(ProtocolMessage { message_type, message })
     }
 }
 
 /// Encodes the protocol message into bytes.
 /// The message type is encoded as a single byte and prepended to the message.
-impl Encodable for ProtocolMessage {
+impl<T: EthMessage> Encodable for ProtocolMessage<T> {
     fn encode(&self, out: &mut dyn BufMut) {
         self.message_type.encode(out);
         self.message.encode(out);
@@ -107,8 +37,8 @@ impl Encodable for ProtocolMessage {
     }
 }
 
-impl From<EthMessage> for ProtocolMessage {
-    fn from(message: EthMessage) -> Self {
+impl<T: EthMessage> From<T> for ProtocolMessage<T> {
+    fn from(message: T) -> Self {
         ProtocolMessage { message_type: message.message_id(), message }
     }
 }
@@ -138,6 +68,14 @@ impl From<EthBroadcastMessage> for ProtocolBroadcastMessage {
     }
 }
 
+// #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub trait EthMessage: Debug + Encodable {
+    fn message_id(&self) -> EthMessageID;
+    fn decode(message_id: EthMessageID, buf: &mut &[u8]) -> Result<Self, reth_rlp::DecodeError>
+    where
+        Self: Sized;
+}
+
 /// Represents a message in the eth wire protocol, versions 66 and 67.
 ///
 /// The ethereum wire protocol is a set of messages that are broadcasted to the network in two
@@ -150,92 +88,36 @@ impl From<EthBroadcastMessage> for ProtocolBroadcastMessage {
 ///  correlate request-response message pairs. This allows for request multiplexing.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum EthMessage {
+pub enum EthStatusMessage {
     /// Status is required for the protocol handshake
     Status(Status),
-    /// The following messages are broadcast to the network
-    NewBlockHashes(NewBlockHashes),
-    NewBlock(Box<NewBlock>),
-    Transactions(Transactions),
-    NewPooledTransactionHashes(NewPooledTransactionHashes),
-    NewPooledTransactionHashes68(NewPooledTransactionHashes68),
-
-    // The following messages are request-response message pairs
-    GetBlockHeaders(RequestPair<GetBlockHeaders>),
-    BlockHeaders(RequestPair<BlockHeaders>),
-    GetBlockBodies(RequestPair<GetBlockBodies>),
-    BlockBodies(RequestPair<BlockBodies>),
-    GetPooledTransactions(RequestPair<GetPooledTransactions>),
-    PooledTransactions(RequestPair<PooledTransactions>),
-    GetNodeData(RequestPair<GetNodeData>),
-    NodeData(RequestPair<NodeData>),
-    GetReceipts(RequestPair<GetReceipts>),
-    Receipts(RequestPair<Receipts>),
 }
 
-impl EthMessage {
+impl EthMessage for EthStatusMessage {
     /// Returns the message's ID.
-    pub fn message_id(&self) -> EthMessageID {
+    fn message_id(&self) -> EthMessageID {
         match self {
-            EthMessage::Status(_) => EthMessageID::Status,
-            EthMessage::NewBlockHashes(_) => EthMessageID::NewBlockHashes,
-            EthMessage::NewBlock(_) => EthMessageID::NewBlock,
-            EthMessage::Transactions(_) => EthMessageID::Transactions,
-            EthMessage::NewPooledTransactionHashes(_) |
-            EthMessage::NewPooledTransactionHashes68(_) => EthMessageID::NewPooledTransactionHashes,
-            EthMessage::GetBlockHeaders(_) => EthMessageID::GetBlockHeaders,
-            EthMessage::BlockHeaders(_) => EthMessageID::BlockHeaders,
-            EthMessage::GetBlockBodies(_) => EthMessageID::GetBlockBodies,
-            EthMessage::BlockBodies(_) => EthMessageID::BlockBodies,
-            EthMessage::GetPooledTransactions(_) => EthMessageID::GetPooledTransactions,
-            EthMessage::PooledTransactions(_) => EthMessageID::PooledTransactions,
-            EthMessage::GetNodeData(_) => EthMessageID::GetNodeData,
-            EthMessage::NodeData(_) => EthMessageID::NodeData,
-            EthMessage::GetReceipts(_) => EthMessageID::GetReceipts,
-            EthMessage::Receipts(_) => EthMessageID::Receipts,
+            EthStatusMessage::Status(_) => EthMessageID::Status,
         }
+    }
+
+    fn decode(message_id: EthMessageID, buf: &mut &[u8]) -> Result<Self, reth_rlp::DecodeError> {
+        Ok(match message_id {
+            EthMessageID::Status => EthStatusMessage::Status(Status::decode(buf)?),
+            _ => return Err(reth_rlp::DecodeError::Custom("invalid message id")),
+        })
     }
 }
 
-impl Encodable for EthMessage {
+impl Encodable for EthStatusMessage {
     fn encode(&self, out: &mut dyn BufMut) {
         match self {
-            EthMessage::Status(status) => status.encode(out),
-            EthMessage::NewBlockHashes(new_block_hashes) => new_block_hashes.encode(out),
-            EthMessage::NewBlock(new_block) => new_block.encode(out),
-            EthMessage::Transactions(transactions) => transactions.encode(out),
-            EthMessage::NewPooledTransactionHashes(hashes) => hashes.encode(out),
-            EthMessage::NewPooledTransactionHashes68(hashes) => hashes.encode(out),
-            EthMessage::GetBlockHeaders(request) => request.encode(out),
-            EthMessage::BlockHeaders(headers) => headers.encode(out),
-            EthMessage::GetBlockBodies(request) => request.encode(out),
-            EthMessage::BlockBodies(bodies) => bodies.encode(out),
-            EthMessage::GetPooledTransactions(request) => request.encode(out),
-            EthMessage::PooledTransactions(transactions) => transactions.encode(out),
-            EthMessage::GetNodeData(request) => request.encode(out),
-            EthMessage::NodeData(data) => data.encode(out),
-            EthMessage::GetReceipts(request) => request.encode(out),
-            EthMessage::Receipts(receipts) => receipts.encode(out),
+            EthStatusMessage::Status(status) => status.encode(out),
         }
     }
     fn length(&self) -> usize {
         match self {
-            EthMessage::Status(status) => status.length(),
-            EthMessage::NewBlockHashes(new_block_hashes) => new_block_hashes.length(),
-            EthMessage::NewBlock(new_block) => new_block.length(),
-            EthMessage::Transactions(transactions) => transactions.length(),
-            EthMessage::NewPooledTransactionHashes(hashes) => hashes.length(),
-            EthMessage::NewPooledTransactionHashes68(hashes) => hashes.length(),
-            EthMessage::GetBlockHeaders(request) => request.length(),
-            EthMessage::BlockHeaders(headers) => headers.length(),
-            EthMessage::GetBlockBodies(request) => request.length(),
-            EthMessage::BlockBodies(bodies) => bodies.length(),
-            EthMessage::GetPooledTransactions(request) => request.length(),
-            EthMessage::PooledTransactions(transactions) => transactions.length(),
-            EthMessage::GetNodeData(request) => request.length(),
-            EthMessage::NodeData(data) => data.length(),
-            EthMessage::GetReceipts(request) => request.length(),
-            EthMessage::Receipts(receipts) => receipts.length(),
+            EthStatusMessage::Status(status) => status.length(),
         }
     }
 }
