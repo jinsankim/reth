@@ -949,9 +949,7 @@ mod tests {
         let fut = builder.with_client_stream(local_addr, move |mut client_stream| async move {
             for _ in 0..num_messages {
                 client_stream
-                    .send(EthMessage::NewPooledTransactionHashes66(NewPooledTransactionHashes66(
-                        vec![],
-                    )))
+                    .send(EthMessage::NewPooledTransactionHashes66(Vec::new().into()))
                     .await
                     .unwrap();
             }

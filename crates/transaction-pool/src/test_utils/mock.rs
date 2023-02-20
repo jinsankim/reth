@@ -13,7 +13,7 @@ use rand::{
 };
 use reth_primitives::{
     Address, FromRecoveredTransaction, IntoRecoveredTransaction, Transaction, TransactionKind,
-    TransactionSignedEcRecovered, TxEip1559, TxHash, TxLegacy, TxType, H256, U128, U256,
+    TransactionSignedEcRecovered, TxEip1559, TxHash, TxLegacy, H256, U128, U256,
 };
 use std::{ops::Range, sync::Arc, time::Instant};
 
