@@ -75,7 +75,7 @@ use crate::{
         NewTransactionEvent, PoolSize, PoolTransaction, PropagatedTransactions, TransactionOrigin,
     },
     validate::{TransactionValidationOutcome, ValidPoolTransaction},
-    OnNewBlockEvent, PoolConfig, PooledTransactionHash, TransactionOrdering, TransactionValidator,
+    OnNewBlockEvent, PoolConfig, TransactionOrdering, TransactionValidator,
 };
 use best::BestTransactions;
 pub use events::TransactionEvent;

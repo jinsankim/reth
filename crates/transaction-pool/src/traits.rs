@@ -1,9 +1,7 @@
-use crate::{
-    error::PoolResult, pool::state::SubPool, validate::ValidPoolTransaction, PooledTransactionHash,
-};
+use crate::{error::PoolResult, pool::state::SubPool, validate::ValidPoolTransaction};
 use reth_primitives::{
     Address, FromRecoveredTransaction, IntoRecoveredTransaction, PeerId, Transaction,
-    TransactionKind, TransactionSignedEcRecovered, TxHash, TxType, H256, U256,
+    TransactionKind, TransactionSignedEcRecovered, TxHash, H256, U256,
 };
 use std::{collections::HashMap, fmt, sync::Arc};
 use tokio::sync::mpsc::Receiver;
@@ -361,11 +359,6 @@ impl PoolTransaction for PooledTransaction {
     /// [`TransactionKind::Create`] if the transaction is a contract creation.
     fn kind(&self) -> &TransactionKind {
         self.transaction.kind()
-    }
-
-    /// Returns the transaction's [`TxType`].
-    fn tx_type(&self) -> TxType {
-        self.transaction.tx_type()
     }
 
     /// Returns a measurement of the heap usage of this type and all its internals.

@@ -7,12 +7,11 @@ use futures::FutureExt;
 use reth_eth_wire::{
     capability::RawCapabilityMessage, message::RequestPair, BlockBodies, BlockBody, BlockHeaders,
     EthMessage, GetBlockBodies, GetBlockHeaders, GetNodeData, GetPooledTransactions, GetReceipts,
-    NewBlock, NewBlockHashes, NewPooledTransactionHashes66, NewPooledTransactionHashes68, NodeData,
-    PooledTransactions, Receipts, SharedTransactions, Transactions,
+    NewBlock, NewBlockHashes, NewPooledTransactionHashes66, NodeData, PooledTransactions, Receipts,
+    SharedTransactions, Transactions,
 };
 use reth_interfaces::p2p::error::{RequestError, RequestResult};
-use reth_primitives::{Bytes, Header, PeerId, Receipt, TransactionSigned, TxHash, TxType, H256};
-use reth_transaction_pool::PooledTransactionHash;
+use reth_primitives::{Bytes, Header, PeerId, Receipt, TransactionSigned, H256};
 use std::{
     fmt,
     sync::Arc,

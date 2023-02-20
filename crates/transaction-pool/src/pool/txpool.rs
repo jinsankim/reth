@@ -13,8 +13,8 @@ use crate::{
         AddedPendingTransaction, AddedTransaction, OnNewBlockOutcome,
     },
     traits::{PoolSize, StateDiff},
-    OnNewBlockEvent, PoolConfig, PoolResult, PoolTransaction, PooledTransactionHash,
-    TransactionOrdering, ValidPoolTransaction, U256,
+    OnNewBlockEvent, PoolConfig, PoolResult, PoolTransaction, TransactionOrdering,
+    ValidPoolTransaction, U256,
 };
 use fnv::FnvHashMap;
 use reth_primitives::{TxHash, H256};
