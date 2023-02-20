@@ -508,8 +508,8 @@ impl<T: PoolTransaction> AllTransactions<T> {
     }
 
     /// Returns an iterator over all _unique_ hashes in the pool
-    pub(crate) fn hashes_iter(&self) -> impl Iterator<Item = PooledTransactionHash> + '_ {
-        self.by_hash.values().map(|tx| (*tx.hash(), tx.tx_type(), tx.size()).into())
+    pub(crate) fn hashes_iter(&self) -> impl Iterator<Item = TxHash> + '_ {
+        self.by_hash.keys().copied()
     }
 
     /// Returns if the transaction for the given hash is already included in this pool
