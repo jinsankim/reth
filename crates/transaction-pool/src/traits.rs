@@ -72,12 +72,12 @@ pub trait TransactionPool: Send + Sync + Clone {
     /// Returns a new stream that yields new valid transactions added to the pool.
     fn transactions_listener(&self) -> Receiver<NewTransactionEvent<Self::Transaction>>;
 
-    /// Returns types, sizes, hashes of all transactions in the pool.
+    /// Returns hashes of all transactions in the pool.
     ///
-    /// Note: The returned `Vec<TxHash>` should be guaranteed that all hashes are unique.
+    /// Note: This returns a `Vec` but should guarantee that all hashes are unique.
     ///
     /// Consumer: P2P
-    fn pooled_transaction_hashes(&self) -> Vec<PooledTransactionHash>;
+    fn pooled_transactions(&self) -> Vec<TxHash>;
 
     /// Returns an iterator that yields transactions that are ready for block production.
     ///
@@ -279,9 +279,6 @@ pub trait PoolTransaction: fmt::Debug + Send + Sync + FromRecoveredTransaction {
     /// Returns the transaction's [`TransactionKind`], which is the address of the recipient or
     /// [`TransactionKind::Create`] if the transaction is a contract creation.
     fn kind(&self) -> &TransactionKind;
-
-    /// Returns the transaction's [`TxType`].
-    fn tx_type(&self) -> TxType;
 
     /// Returns a measurement of the heap usage of this type and all its internals.
     fn size(&self) -> usize;
