@@ -342,13 +342,6 @@ impl PoolTransaction for MockTransaction {
         }
     }
 
-    fn tx_type(&self) -> TxType {
-        match self {
-            MockTransaction::Legacy { .. } => TxType::Legacy,
-            MockTransaction::Eip1559 { .. } => TxType::EIP1559,
-        }
-    }
-
     fn size(&self) -> usize {
         0
     }
